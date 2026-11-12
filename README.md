@@ -141,7 +141,7 @@ CI 在 GitHub Actions 上跑（[ci.yml](.github/workflows/ci.yml)），发版由
 
 两个真实宿主套件共用 [test/e2e/harness.mjs](test/e2e/harness.mjs)：它定位一个可运行的 Harness CLI（本机桌面 App，或 `DSH_E2E_DSH_BIN` 指向 npm 安装的 `@deepseek-ai/dsh`），在临时 `DSH_HOME` 里生成 `web` profile 并 `link:` 本仓库，启动真实的 `dsh web`，再用启动 token 换浏览器 cookie。
 
-- [test/e2e-host.mjs](test/e2e-host.mjs)：走真实 HTTP 面——插件在真实 Host 里加载、`/composer-prefill/prefs` 返回配置与 entry id、未打开会话的 predict 不产生模型调用、405/403/400 围栏与 16 KiB 体积上限。
+- [test/e2e-host.mjs](test/e2e-host.mjs)：走真实 HTTP 面——插件在真实 Host 里加载、`/composer-prefill/prefs` 返回配置与 entry id、设置文档里本插件的命名空间存在且开关双向落盘（写入 profile patch）、未打开会话的 predict 不产生模型调用、405/403/400 围栏与 16 KiB 体积上限。
 - [test/e2e-browser.mjs](test/e2e-browser.mjs)：Playwright + headless Chromium 打开真实界面——建议条从 `cached` 回放出现、点击填入草稿、清空后本地恢复（不再发请求）、`↻` 发 `refresh` 换一条、`✕` 忽略后打字再清空也不回来，以及设置 → 通用的开关写穿到宿主（真实 `/composer-prefill/prefs` 读到 `enabled:false`）。
 
 浏览器套件用 Playwright 路由拦截 `/composer-prefill/predict` 的返回，所以它验的是**客户端状态机 + 真实 DSH 外壳**，不消耗模型调用；真实端点由 host 套件覆盖。`pnpm test:e2e` 需要一次 `pnpm exec playwright install chromium`，没有可用的 Harness 时会打印跳过信息并以 0 退出。
