@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-12
+
 ### Added
 
 - GitHub Actions CI（`.github/workflows/ci.yml`）：Ubuntu Node 22/24 与 Windows Node 22 上跑 `tsc --checkJs`、单元测试和宿主 smoke test；另有单独的覆盖率门槛（`lib/**`）与打包内容校验。Windows 覆盖是为了证明测试入口不依赖 shell glob。
@@ -97,7 +99,8 @@
   `defaultPrevented` checks), click-to-accept through `inputActions` with a
   `draftRev` CAS, `Esc`/`✕` dismissal.
 
-[Unreleased]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/wangxiaocuo/dsh-composer-prefill/releases/tag/v0.3.0
 
 <!-- v0.1.0 and v0.2.0 predate the repository's first tag and have no link targets. -->
