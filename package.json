@@ -4,6 +4,14 @@
   "description": "Codex-style composer predictions for DeepSeek Harness: suggest the next user message after an assistant turn and fill the composer on Tab.",
   "license": "MIT",
   "author": "wangxiaocuo",
+  "homepage": "https://github.com/wangxiaocuo/dsh-composer-prefill#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wangxiaocuo/dsh-composer-prefill.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wangxiaocuo/dsh-composer-prefill/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=20",
