@@ -391,7 +391,16 @@ test('an outer abort signal cancels the in-flight call', async () => {
 
 test('the configured timeout aborts a call that never finishes', async () => {
   const { ctx, calls } = makeCtx({ stream: abortableStream() })
-  await assert.rejects(createGenerator(ctx, { timeoutMs: 10 })(makeSession()), (error) => error.name === 'AbortError')
+  // `AbortSignal.timeout` keeps an unref'd timer on Node 20/22, so the process
+  // would drain the event loop before the 10 ms deadline and the runner would
+  // cancel the test ("Promise resolution is still pending"). A ref'd timer
+  // holds the loop open until the generator settles; Node 24 does not need it.
+  const keepAlive = setTimeout(() => {}, 1000)
+  try {
+    await assert.rejects(createGenerator(ctx, { timeoutMs: 10 })(makeSession()), (error) => error.name === 'AbortError')
+  } finally {
+    clearTimeout(keepAlive)
+  }
   assert.equal(calls.prepare[0].signal.aborted, true)
 })
 
