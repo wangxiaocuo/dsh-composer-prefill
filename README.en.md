@@ -12,6 +12,7 @@ Codex-style composer predictions for DeepSeek Harness: after an assistant turn e
 |---|---|
 | Assistant turn ended, composer empty | One suggestion appears (single line, conversation language, ≤120 chars) |
 | `Tab` / click the text | Fills the draft; nothing is sent |
+| `↻` | Another one: force a fresh generation (skips the cache and the interval, one model call); an empty result keeps the current text |
 | `Esc` / `✕` | Hidden for this turn (typing and clearing will not bring it back until the next turn) |
 | Start typing | Hides immediately and aborts the in-flight request (saves tokens) |
 | Delete what you typed | The suggestion returns **instantly** from local state, no request |
@@ -29,7 +30,7 @@ Already installed on this machine through the Plugin Manager (`link:` to this re
 Settings → Plugins → Install → absolute path to this directory
 ```
 
-The nine tunables then appear under **Settings → Plugins → Composer predictions → Configuration**.
+**Settings → General** then carries a "Composer predictions" switch (applies immediately), and the nine tunables appear under **Settings → Plugins → Composer predictions → Configuration**.
 
 ## How it works
 
@@ -50,6 +51,9 @@ Two request modes:
 |---|---|
 | `{sessionId}` | Normal request after a turn; the model is called only on a cache miss |
 | `{sessionId, mode:"cached"}` | Cache-only replay used when a session view remounts: instant on a hit, **never generates** |
+| `{sessionId, mode:"refresh"}` | `↻ Another one`: bypasses the cache and the interval, and replaces the cached entry |
+
+A second endpoint, `POST /composer-prefill/prefs`, tells the General settings row whether predictions are on and which Loader entry id owns the config form; the write goes through DSH's own `configForms`, the same document the Plugin Manager's form edits.
 
 `Tab` is a guarded enhancement: a bubble-phase listener that claims the key only when the row is visible, focus is inside `[data-composer-card]`, there is no IME/modifier, and no slash/`@` menu consumed it (`defaultPrevented`). Clicking is the supported path.
 
@@ -105,5 +109,6 @@ test/               Host smoke, prompt units, browser-half DOM behaviour
 ## Roadmap
 
 - 0.1.x: skeleton + suggestion row (M0/M1)
-- **0.2.0**: real model call, cache/coalescing/throttling, cached replay on session switch, restore when the draft is cleared
-- 0.3.0 (optional): `↻ another one`, a General settings row, inline ghost text
+- 0.2.0: real model call, cache/coalescing/throttling, cached replay on session switch, restore when the draft is cleared
+- **0.3.0**: `↻ another one`, a Settings → General switch
+- 0.4.0 (optional): inline ghost text, candidate cycling on the row

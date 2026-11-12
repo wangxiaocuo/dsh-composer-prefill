@@ -1,7 +1,6 @@
 /**
- * Browser-half behaviour test: loads `client.js` into a jsdom page, mounts the
- * slot row with stand-in session hooks, and drives the trigger state machine
- * through a fake `fetch`.
+ * Browser-half behaviour test: loads `client.js` into a jsdom page, mounts both
+ * registered rows with stand-in hooks, and drives them through a fake `fetch`.
  *
  * Run: node --test test/client-dom.test.mjs
  */
@@ -11,8 +10,19 @@ import test from 'node:test'
 import { JSDOM } from 'jsdom'
 
 const SESSION = 'session-test'
+const ENTRY_ID = 'include:composer-prefill'
 const SUGGESTION_A = '继续，把测试跑一遍'
 const SUGGESTION_B = '再补一个边界用例'
+const SUGGESTION_C = '换一条试试'
+
+const LABELS = {
+  settingsTitle: '输入预测',
+  settingsDescription: '助手回复后在输入框上方建议下一条消息。',
+  settingsUnavailable: '宿主插件运行后可用。',
+  accept: '填入这条建议',
+  dismiss: '忽略这条建议',
+  another: '换一条',
+}
 
 const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
   url: 'http://127.0.0.1:5123/',
@@ -33,19 +43,42 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 const { createRoot } = await import('react-dom/client')
 
-/** Every request the row made, in order. */
+/** Requests the rows made, in order. */
 const calls = []
-/** Replies the current test wants the endpoint to give, in order. */
-let replies = []
+/** Replies for `/predict`, in order. */
+let predictReplies = []
+/** Reply for `/prefs`. */
+let prefsReply = { enabled: true, entryId: ENTRY_ID }
+/** Every `configForms` write the settings row made. */
+const writes = []
+/** Value the fake config form currently reports. */
+let storedEnabled = true
 
 globalThis.fetch = async (url, init) => {
-  calls.push({ url: String(url), body: init?.body === undefined ? undefined : JSON.parse(init.body) })
-  const value = replies.length > 0 ? replies.shift() : { enabled: true, text: null }
-  return {
-    ok: true,
-    status: 200,
-    json: async () => ({ ok: true, value }),
-  }
+  const target = String(url)
+  calls.push({ url: target, body: init?.body === undefined ? undefined : JSON.parse(init.body) })
+  const value = target.endsWith('/prefs')
+    ? prefsReply
+    : predictReplies.length > 0
+      ? predictReplies.shift()
+      : { enabled: true, text: null }
+  return { ok: true, status: 200, json: async () => ({ ok: true, value }) }
+}
+
+const configForm = {
+  getSnapshot: () => ({ status: 'ready', value: { showPredictions: storedEnabled }, revision: 1, writable: true }),
+  subscribe: () => () => {},
+  set: (field, value) => {
+    writes.push({ field, value })
+    storedEnabled = value
+    return Promise.resolve(true)
+  },
+}
+const configForms = {
+  get: (entryId) => {
+    assert.equal(entryId, ENTRY_ID, 'the settings row addresses the reported entry id')
+    return configForm
+  },
 }
 
 let module = null
@@ -62,58 +95,50 @@ const plugin = module.factory((id) => {
   throw new Error(`unexpected require: ${id}`)
 })
 
-let Row = null
+/** Registered slot components, by slot name. */
+const slots = {}
 plugin.apply({
   effect: (fn) => fn(),
   locale: { register: () => () => {} },
+  get: (name) => (name === 'configForms' ? configForms : undefined),
   slots: {
     inject: (_key, callback) => callback(),
-    register: (_options, Component) => {
-      Row = Component
+    register: (options, Component) => {
+      slots[options.name] = Component
       return () => {}
     },
   },
 })
-assert.equal(typeof Row, 'function', 'the row is registered into the dock slot')
+const Row = slots['conversation.input.dock']
+const SettingsRow = slots['settings.general.item']
+assert.equal(typeof Row, 'function', 'the suggestion row is registered into the dock slot')
+assert.equal(typeof SettingsRow, 'function', 'the settings row is registered into the general slot')
 
 /**
- * Mount a fresh row with controllable session state.
+ * Let pending promise chains and effects settle.
  *
- * @returns {{
- *   state: { draft: string, running: boolean, phase: string },
- *   accepted: string[],
- *   render: () => Promise<void>,
- *   flush: () => Promise<void>,
- *   text: () => string,
- *   teardown: () => Promise<void>,
- * }} harness.
+ * @returns {Promise<void>} completion.
  */
-function mount() {
+async function flush() {
+  await React.act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
+
+/**
+ * Mount any component into a fresh container.
+ *
+ * @param {Function} Component registered slot component.
+ * @param {() => object} element builds the element.
+ * @returns {{ root: any, container: HTMLElement, render: () => Promise<void>, text: () => string, teardown: () => Promise<void> }} harness.
+ */
+function mount(Component, element) {
   const container = document.getElementById('root')
   container.innerHTML = ''
   const root = createRoot(container)
-  const state = { draft: '', running: false, phase: 'plain' }
-  const accepted = []
-  const inputActions = {
-    captureInsertion: () => ({ start: 0, end: 0, draftRev: 1 }),
-    insertText: (text) => {
-      accepted.push(text)
-      return true
-    },
-    persistDraft: () => {},
-  }
-  const element = () =>
-    React.createElement(Row, {
-      sessionId: SESSION,
-      inputActions,
-      t: (key) => key,
-      useInput: (selector) => selector({ draft: state.draft, attachmentIds: [], phase: state.phase }),
-      useSessionStatus: (selector) => selector(new Map([[SESSION, { running: state.running }]])),
-    })
-
   return {
-    state,
-    accepted,
+    root,
+    container,
     async render() {
       await React.act(async () => {
         root.render(element())
@@ -130,24 +155,57 @@ function mount() {
 }
 
 /**
- * Let pending promise chains and effects settle.
+ * Mount the suggestion row with controllable session state.
  *
- * @returns {Promise<void>} completion.
+ * @returns {object} harness with `state`, `accepted` and the generic helpers.
  */
-async function flush() {
-  await React.act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0))
-  })
+function mountRow() {
+  const state = { draft: '', running: false, phase: 'plain' }
+  const accepted = []
+  const inputActions = {
+    captureInsertion: () => ({ start: 0, end: 0, draftRev: 1 }),
+    insertText: (text) => {
+      accepted.push(text)
+      return true
+    },
+    persistDraft: () => {},
+  }
+  const harness = mount(Row, () =>
+    React.createElement(Row, {
+      sessionId: SESSION,
+      inputActions,
+      t: (key) => LABELS[key] ?? key,
+      useInput: (selector) => selector({ draft: state.draft, attachmentIds: [], phase: state.phase }),
+      useSessionStatus: (selector) => selector(new Map([[SESSION, { running: state.running }]])),
+    }),
+  )
+  return { ...harness, state, accepted }
+}
+
+/**
+ * Mount the Settings → General row.
+ *
+ * @returns {object} mount harness plus the switch query.
+ */
+function mountSettings() {
+  const harness = mount(SettingsRow, () => React.createElement(SettingsRow, { t: (key) => LABELS[key] ?? key }))
+  return {
+    ...harness,
+    switchButton: () => document.querySelector('button[role="switch"]'),
+  }
 }
 
 test.beforeEach(() => {
   calls.length = 0
-  replies = []
+  writes.length = 0
+  predictReplies = []
+  prefsReply = { enabled: true, entryId: ENTRY_ID }
+  storedEnabled = true
 })
 
 test('mounting on an idle session asks for a cached suggestion and shows it', async () => {
-  const row = mount()
-  replies.push({ enabled: true, text: SUGGESTION_A })
+  const row = mountRow()
+  predictReplies.push({ enabled: true, text: SUGGESTION_A })
   await row.render()
 
   assert.equal(calls.length, 1, 'one request on mount')
@@ -157,8 +215,8 @@ test('mounting on an idle session asks for a cached suggestion and shows it', as
 })
 
 test('typing hides the row and clearing restores it without another request', async () => {
-  const row = mount()
-  replies.push({ enabled: true, text: SUGGESTION_A })
+  const row = mountRow()
+  predictReplies.push({ enabled: true, text: SUGGESTION_A })
   await row.render()
   const requestCount = calls.length
 
@@ -174,28 +232,58 @@ test('typing hides the row and clearing restores it without another request', as
 })
 
 test('a finished turn generates once, and a new turn replaces the text', async () => {
-  const row = mount()
-  replies.push({ enabled: true, text: SUGGESTION_A })
+  const row = mountRow()
+  predictReplies.push({ enabled: true, text: SUGGESTION_A })
   await row.render()
 
-  // A turn runs, then ends: the row must ask for a fresh suggestion.
   row.state.running = true
   await row.render()
   assert.doesNotMatch(row.text(), new RegExp(SUGGESTION_A), 'nothing shows during a turn')
 
-  replies.push({ enabled: true, text: SUGGESTION_B })
+  predictReplies.push({ enabled: true, text: SUGGESTION_B })
   row.state.running = false
   await row.render()
 
-  const generateCall = calls.at(-1)
-  assert.deepEqual(generateCall.body, { sessionId: SESSION }, 'a turn end uses the generating mode')
+  assert.deepEqual(calls.at(-1).body, { sessionId: SESSION }, 'a turn end uses the generating mode')
   assert.match(row.text(), new RegExp(SUGGESTION_B), 'the new suggestion replaces the old one')
   await row.teardown()
 })
 
+test('the reroll button asks for a refresh and replaces the text', async () => {
+  const row = mountRow()
+  predictReplies.push({ enabled: true, text: SUGGESTION_A })
+  await row.render()
+
+  const reroll = document.querySelector('button[data-composer-prefill-reroll]')
+  assert.ok(reroll, 'the reroll button exists')
+  predictReplies.push({ enabled: true, text: SUGGESTION_C })
+  await React.act(async () => {
+    reroll.click()
+  })
+  await flush()
+
+  assert.deepEqual(calls.at(-1).body, { sessionId: SESSION, mode: 'refresh' }, 'reroll asks for a refresh')
+  assert.match(row.text(), new RegExp(SUGGESTION_C), 'the rerolled text replaces the old one')
+  await row.teardown()
+})
+
+test('a reroll that yields nothing keeps the current suggestion', async () => {
+  const row = mountRow()
+  predictReplies.push({ enabled: true, text: SUGGESTION_A })
+  await row.render()
+
+  predictReplies.push({ enabled: true, text: null })
+  await React.act(async () => {
+    document.querySelector('button[data-composer-prefill-reroll]').click()
+  })
+  await flush()
+  assert.match(row.text(), new RegExp(SUGGESTION_A), 'the old suggestion survives an empty reroll')
+  await row.teardown()
+})
+
 test('dismissing suppresses the suggestion until the next turn', async () => {
-  const row = mount()
-  replies.push({ enabled: true, text: SUGGESTION_A })
+  const row = mountRow()
+  predictReplies.push({ enabled: true, text: SUGGESTION_A })
   await row.render()
 
   const closeButton = [...document.querySelectorAll('button')].find((button) => button.textContent === '✕')
@@ -211,10 +299,9 @@ test('dismissing suppresses the suggestion until the next turn', async () => {
   await row.render()
   assert.doesNotMatch(row.text(), new RegExp(SUGGESTION_A), 'a dismissal survives clearing the draft')
 
-  // The next turn resets the dismissal.
   row.state.running = true
   await row.render()
-  replies.push({ enabled: true, text: SUGGESTION_B })
+  predictReplies.push({ enabled: true, text: SUGGESTION_B })
   row.state.running = false
   await row.render()
   assert.match(row.text(), new RegExp(SUGGESTION_B), 'a new turn may suggest again')
@@ -222,8 +309,8 @@ test('dismissing suppresses the suggestion until the next turn', async () => {
 })
 
 test('clicking the text accepts it into the composer', async () => {
-  const row = mount()
-  replies.push({ enabled: true, text: SUGGESTION_A })
+  const row = mountRow()
+  predictReplies.push({ enabled: true, text: SUGGESTION_A })
   await row.render()
 
   const acceptButton = [...document.querySelectorAll('button')].find((button) => button.textContent === SUGGESTION_A)
@@ -233,4 +320,27 @@ test('clicking the text accepts it into the composer', async () => {
   })
   assert.deepEqual(row.accepted, [SUGGESTION_A], 'the exact suggestion text is inserted')
   await row.teardown()
+})
+
+test('the settings row reads the switch, then writes it through the config form', async () => {
+  storedEnabled = false
+  prefsReply = { enabled: false, entryId: ENTRY_ID }
+  const settings = mountSettings()
+  await settings.render()
+
+  assert.match(settings.text(), new RegExp(LABELS.settingsTitle), 'the row shows its title')
+  assert.ok(calls.some((entry) => entry.url.endsWith('/prefs')), 'the row asks the Host for its state')
+
+  const toggle = settings.switchButton()
+  assert.ok(toggle, 'the switch exists')
+  assert.equal(toggle.getAttribute('aria-checked'), 'false', 'the switch starts in the stored state')
+
+  await React.act(async () => {
+    toggle.click()
+  })
+  await flush()
+
+  assert.deepEqual(writes, [{ field: 'showPredictions', value: true }], 'the switch writes the config field')
+  assert.equal(settings.switchButton().getAttribute('aria-checked'), 'true', 'the switch reflects the new value')
+  await settings.teardown()
 })

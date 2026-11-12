@@ -1,12 +1,12 @@
 import z from '@deepseek-ai/schemastery'
-import { registerRoute } from './lib/http.js'
+import { registerApi } from './lib/http.js'
 import { createPredictions } from './lib/predictions.js'
 
 /**
  * Host services this plugin cannot work without.
  *
- * `webServer` is used directly to register our exact route; `connection` runs
- * the host/origin fence and the owner check for that route.
+ * `webServer` is used directly to register our exact routes; `connection` runs
+ * the host/origin fence and the owner check for them.
  */
 export const inject = ['sessions', 'connection', 'webServer', 'llm', 'agentDefaultModel']
 
@@ -71,6 +71,8 @@ export const Config = z.object({
  * @returns {void}
  */
 export function apply(ctx, config) {
-  const predictions = createPredictions(ctx, config)
-  registerRoute(ctx, predictions.handle)
+  // The settings row addresses this plugin's config form by its Loader entry id.
+  const entryId = typeof ctx.fiber?.entry?.options?.id === 'string' ? ctx.fiber.entry.options.id : null
+  const predictions = createPredictions(ctx, config, { entryId })
+  registerApi(ctx, { predict: predictions.handle, prefs: predictions.prefs })
 }
