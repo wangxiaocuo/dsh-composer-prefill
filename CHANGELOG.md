@@ -10,7 +10,7 @@
 - 标签触发的发版流水线（`.github/workflows/release.yml`）：推送 `vX.Y.Z` 标签后校验标签与 `package.json` 版本一致、重跑全部检查，再用 npm Trusted Publishing（OIDC，无需 `NPM_TOKEN`）`npm publish --provenance`，最后创建 GitHub Release。
 - 工程校验脚本：`scripts/check-release.mjs` 校验 `package.json`、`CHANGELOG.md` 与 git 标签三方一致；`scripts/check-pack.mjs` 校验 npm tarball 的文件清单（运行所需文件都在、测试/CI/开发文件都不在）。
 - 宿主侧单元测试：`lib/config.js`、`lib/generate.js`、`lib/http.js`、`lib/predictions.js` 现在有独立的 `node:test` 用例，覆盖率门槛落在 CI 里；`test/run-unit.mjs` 自己枚举测试文件，Windows 与 POSIX shell 行为一致。
-- Dependabot：每周检查 npm 依赖与 GitHub Actions 版本。
+- Dependabot：每周检查 npm 依赖与 GitHub Actions 版本；minor/patch 自动开 PR，测试工具链（TypeScript / jsdom / React / `@types/node`）的 major 走手动升级。
 
 ### Changed
 
