@@ -123,7 +123,10 @@ jobs:
           mkdir -p "$CLI_DIR"
           cd "$CLI_DIR"
           printf '{"name":"dsh-e2e-runtime","private":true}\n' > package.json
-          pnpm add "@deepseek-ai/dsh@${DSH_VERSION}"
+          # `--ignore-scripts` is deliberate: pnpm 11 refuses an install that
+          # leaves dependency build scripts unanswered, and none of the native
+          # build scripts (node-pty, koffi, …) are needed to boot `dsh web`.
+          pnpm add "@deepseek-ai/dsh@${DSH_VERSION}" --ignore-scripts
       - name: install chromium
         run: pnpm exec playwright install --with-deps chromium
       - name: host e2e (bundle loads, real routes, fences)
@@ -136,7 +139,7 @@ jobs:
         run: pnpm test:e2e:browser
       - name: upload the failure screenshot
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: browser-e2e-failure
           path: ${{ runner.temp }}/*.png
