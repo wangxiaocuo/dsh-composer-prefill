@@ -9,6 +9,12 @@ coverage/
 # Package tarballs
 *.tgz
 
+# Playwright artefacts
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # Logs
 *.log
 npm-debug.log*
