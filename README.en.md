@@ -6,6 +6,7 @@ Codex-style composer predictions for DeepSeek Harness: after an assistant turn e
 
 [![npm](https://img.shields.io/npm/v/@wangxiaocuo/dsh-composer-prefill?label=npm)](https://www.npmjs.com/package/@wangxiaocuo/dsh-composer-prefill)
 [![license](https://img.shields.io/npm/l/@wangxiaocuo/dsh-composer-prefill)](LICENSE)
+[![CI](https://github.com/wangxiaocuo/dsh-composer-prefill/actions/workflows/ci.yml/badge.svg)](https://github.com/wangxiaocuo/dsh-composer-prefill/actions/workflows/ci.yml)
 
 ---
 
@@ -103,12 +104,46 @@ lib/prompt.js       Context trimming, output sanitising, hot-reloaded prompt
 lib/config.js       Config readers (schemastery refs or plain values)
 client.js           Browser half: the row, trigger state machine, Tab/Esc, accept
 prompt.txt          System prompt
-test/               Host smoke, prompt units, browser-half DOM behaviour
+test/               Unit tests, Host smoke, browser-half DOM behaviour
 ```
 
 - `client.js` changes: reload the page.
 - `index.js` / `lib/*.js` changes: **quit and reopen the app**. This desktop build ships no Host-side module replacement, and Node caches ES modules for the process lifetime.
-- Tests: `npm test` (prompt units + browser-half DOM behaviour) · `npm run test:smoke` (endpoint end-to-end with a scripted model)
+
+```bash
+pnpm install
+pnpm typecheck        # tsc --checkJs (index.js + lib/**)
+pnpm test             # unit tests (node:test, Host lib + browser-half DOM)
+pnpm test:coverage    # coverage floor on lib/** (same flags as CI)
+pnpm test:smoke       # endpoint end-to-end (real Cordis wiring, scripted model)
+pnpm pack:check       # verify the npm tarball file list
+pnpm verify           # all of the above; also runs on prepublishOnly
+```
+
+## Engineering baseline
+
+CI runs on GitHub Actions ([ci.yml](.github/workflows/ci.yml)) and releases are tag-triggered ([release.yml](.github/workflows/release.yml)).
+
+| Check | Environment |
+|---|---|
+| `tsc --checkJs` (`index.js` + `lib/**`) | Ubuntu Node 22 / 24 |
+| Unit tests + Host smoke test | Ubuntu Node 22 / 24, Windows Node 22 |
+| Coverage floor (`lib/**`) | Ubuntu Node 22 |
+| Package contents (`npm pack` file list) | Ubuntu Node 22 |
+
+`npm run test:coverage` requires lines 95 / branches 90 / functions 95 on `lib/**`; `test/run-unit.mjs` enumerates `*.test.mjs` itself instead of relying on shell glob expansion, so Windows runs the same set of cases.
+
+The supported baseline is **Node 22.13+**: Node 20 reached end of life in April 2026, the pinned pnpm 11 cannot run on Node < 22.13 (`node:sqlite`), and the DSH runtime this plugin loads into ships Node 24. `engines.node` is therefore `>=22.13`.
+
+`client.js` is a DSH module-loader script (`window.__ModuleLoader__.load` + `factory(require)`) and cannot be imported as ESM, so it is **not typechecked**; its behaviour is covered by `test/client-dom.test.mjs` under jsdom.
+
+## Releasing (maintainers)
+
+1. Bump the version in `package.json` and fold the `[Unreleased]` entries into a new `## [x.y.z] - YYYY-MM-DD` section in `CHANGELOG.md`, with its version link.
+2. Commit, push, then tag: `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
+3. The tag runs [release.yml](.github/workflows/release.yml): `pnpm release:check` (tag = `package.json` = newest CHANGELOG version), then typecheck, tests, smoke and pack checks, then `npm publish --provenance` and a GitHub Release.
+
+Publishing uses npm Trusted Publishing (OIDC), so no `NPM_TOKEN` is required: add repository `wangxiaocuo/dsh-composer-prefill` and workflow `release.yml` under the package's **Settings → Publishing access → Trusted publishers** on npmjs.com. To use an automation token instead, uncomment the `NODE_AUTH_TOKEN` environment variable in release.yml and add the matching secret.
 
 ## Known limits
 
@@ -116,6 +151,8 @@ test/               Host smoke, prompt units, browser-half DOM behaviour
 - `Tab` relies on the internal `[data-composer-card]` DOM contract; DSH upgrades need a regression pass.
 - Latency is one real model call, roughly 1–3 seconds.
 - Targets the `0.2.2-rc.1` API generation; upgrades need a regression pass.
+- `client.js` is loaded directly by the Host loader and is outside `tsc --checkJs`; only the Host half (`index.js` + `lib/**`) is typechecked.
+- There is no browser e2e yet: CI covers the client state machine under jsdom and the Host endpoints with a scripted model, but "click it in a real DSH" still needs a manual pass before a release.
 
 ## Roadmap
 

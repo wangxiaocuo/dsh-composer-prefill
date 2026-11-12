@@ -6,6 +6,7 @@
 
 [![npm](https://img.shields.io/npm/v/@wangxiaocuo/dsh-composer-prefill?label=npm)](https://www.npmjs.com/package/@wangxiaocuo/dsh-composer-prefill)
 [![license](https://img.shields.io/npm/l/@wangxiaocuo/dsh-composer-prefill)](LICENSE)
+[![CI](https://github.com/wangxiaocuo/dsh-composer-prefill/actions/workflows/ci.yml/badge.svg)](https://github.com/wangxiaocuo/dsh-composer-prefill/actions/workflows/ci.yml)
 
 ---
 
@@ -103,12 +104,46 @@ lib/prompt.js       上下文裁剪、输出消毒、提示词热读
 lib/config.js       配置读取（兼容 schemastery ref 与普通值）
 client.js           浏览器半：建议条、触发状态机、Tab/Esc、接受
 prompt.txt          系统提示词
-test/               宿主 smoke、提示词单测、浏览器半 DOM 行为测试
+test/               单元测试、宿主 smoke、浏览器半 DOM 行为测试
 ```
 
 - `client.js` 改动：刷新页面即可。
 - `index.js` / `lib/*.js` 改动：**退出并重新打开应用**。这套桌面构建没有宿主侧模块热替换，Node 的 ESM 缓存不会因文件变化而失效。
-- 测试：`npm test`（提示词单测 + 浏览器半行为测试）· `npm run test:smoke`（宿主端点端到端，桩模型）
+
+```bash
+pnpm install
+pnpm typecheck        # tsc --checkJs（index.js + lib/**）
+pnpm test             # 单元测试（node:test，含宿主 lib 与浏览器半 DOM）
+pnpm test:coverage    # 覆盖率门槛（lib/**，与 CI 同一套参数）
+pnpm test:smoke       # 宿主端点端到端（真实 Cordis 装配，桩模型）
+pnpm pack:check       # 核对 npm tarball 的文件清单
+pnpm verify           # 以上全部；prepublishOnly 也跑这一条
+```
+
+## 工程基线
+
+CI 在 GitHub Actions 上跑（[ci.yml](.github/workflows/ci.yml)），发版由标签触发（[release.yml](.github/workflows/release.yml)）。
+
+| 检查 | 环境 |
+|---|---|
+| `tsc --checkJs`（`index.js` + `lib/**`） | Ubuntu Node 22 / 24 |
+| 单元测试 + 宿主 smoke test | Ubuntu Node 22 / 24，Windows Node 22 |
+| 覆盖率门槛（`lib/**`） | Ubuntu Node 22 |
+| 打包内容（`npm pack` 文件清单） | Ubuntu Node 22 |
+
+`npm run test:coverage` 在 `lib/**` 上的门槛是行 95% / 分支 90% / 函数 95%；`test/run-unit.mjs` 自己枚举 `*.test.mjs`，不依赖 shell 展开 glob，所以 Windows 上跑的是同一批用例。
+
+支持基线是 **Node 22.13+**：Node 20 已于 2026 年 4 月 EOL，锁定的 pnpm 11 在 Node < 22.13 上无法运行（`node:sqlite`），而本插件实际运行的 DSH 运行时自带 Node 24。`engines.node` 已相应收紧到 `>=22.13`。
+
+`client.js` 是 DSH 的 module-loader 脚本（`window.__ModuleLoader__.load` + `factory(require)`），不能当 ESM 导入，因此**不参与 tsc 检查**；它的行为由 `test/client-dom.test.mjs` 在 jsdom 里覆盖。
+
+## 发版（维护者）
+
+1. 改 `package.json` 版本与 `CHANGELOG.md`：把 `[Unreleased]` 下的条目收进新的 `## [x.y.z] - YYYY-MM-DD`，并补上版本链接。
+2. 提交推送后打标签：`git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`。
+3. 标签会触发 [release.yml](.github/workflows/release.yml)：先跑 `pnpm release:check`（标签 = `package.json` = CHANGELOG 最新版本），再跑类型检查、测试、smoke、打包校验，最后 `npm publish --provenance` 并创建 GitHub Release。
+
+发布用 npm Trusted Publishing（OIDC），不需要 `NPM_TOKEN`：在 npmjs.com 该包的 **Settings → Publishing access → Trusted publishers** 里加上仓库 `wangxiaocuo/dsh-composer-prefill` 和 workflow `release.yml` 即可。如果更想用自动化 token，把 release.yml 里注释掉的 `NODE_AUTH_TOKEN` 打开并配上 secret。
 
 ## 已知限制
 
@@ -116,6 +151,8 @@ test/               宿主 smoke、提示词单测、浏览器半 DOM 行为测�
 - `Tab` 依赖 `[data-composer-card]` 这一内部 DOM 约定，DSH 升级需要回归。
 - 延迟：请求到显示约 1–3 秒（一次真实模型调用）。
 - 只面向 `0.2.2-rc.1` 这一代 API，升级需要回归。
+- `client.js` 是宿主 loader 直接加载的脚本，不在 `tsc --checkJs` 的检查范围内；类型检查只覆盖宿主半（`index.js` + `lib/**`）。
+- 还没有浏览器 e2e：CI 用 jsdom 覆盖客户端状态机、用桩模型覆盖宿主端点，但「真实 DSH 里点一下」仍需发版前手动回归。
 
 ## 路线
 
