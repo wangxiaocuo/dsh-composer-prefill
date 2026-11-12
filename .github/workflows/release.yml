@@ -1,9 +1,9 @@
 # Publish a release from a version tag.
 #
 # Pushing a `vX.Y.Z` tag validates that the tag matches package.json, runs the
-# full local verification set (typecheck, unit/dom tests, Host smoke test,
-# package contents), publishes to npm with provenance, and creates the GitHub
-# release.
+# full verification set (typecheck, unit/dom tests, Host smoke test, package
+# contents, and the real-host + browser end-to-end suites), publishes to npm
+# with provenance, and creates the GitHub release.
 #
 # npm authentication uses Trusted Publishing (OIDC), so no NPM_TOKEN secret is
 # required: configure the package on npmjs.com under Settings -> Publishing
@@ -40,7 +40,7 @@ jobs:
       # Trusted Publishing.
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
       # Trusted Publishing needs npm >= 11.5.1; the npm bundled with Node 22 is
       # older and reports ENEEDAUTH instead of exchanging the OIDC token.
@@ -67,6 +67,33 @@ jobs:
       - run: pnpm test
       - run: pnpm test:smoke
       - run: pnpm pack:check
+      - name: install a pinned DSH runtime
+        shell: bash
+        env:
+          DSH_VERSION: 0.2.2-rc.1
+        run: |
+          CLI_DIR="$RUNNER_TEMP/dsh-cli"
+          mkdir -p "$CLI_DIR"
+          cd "$CLI_DIR"
+          printf '{"name":"dsh-e2e-runtime","private":true}\n' > package.json
+          pnpm add "@deepseek-ai/dsh@${DSH_VERSION}"
+      - name: install chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: host e2e
+        env:
+          DSH_E2E_DSH_BIN: ${{ runner.temp }}/dsh-cli/node_modules/@deepseek-ai/dsh/lib/bin.js
+        run: pnpm test:e2e:host
+      - name: browser e2e
+        env:
+          DSH_E2E_DSH_BIN: ${{ runner.temp }}/dsh-cli/node_modules/@deepseek-ai/dsh/lib/bin.js
+        run: pnpm test:e2e:browser
+      - name: upload the failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-e2e-failure
+          path: ${{ runner.temp }}/*.png
+          if-no-files-found: ignore
       - name: publish to npm
         # env:
         #   NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

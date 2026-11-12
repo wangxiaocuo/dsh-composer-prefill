@@ -7,8 +7,11 @@
 # on the current LTS baseline; platform-specific cases either inject a seam or
 # skip with an explicit reason.
 #
-# The real-desktop end-to-end suite is intentionally not part of CI: this
-# package has no e2e suite yet. Add a job for it once `test:e2e` exists.
+# The real-host suites boot an actual `dsh web` Host from a pinned npm-installed
+# DSH runtime in a throwaway DSH_HOME: `test/e2e-host.mjs` asserts the plugin's
+# real HTTP surface, and `test/e2e-browser.mjs` drives the row and the settings
+# switch in headless Chromium. They run on Ubuntu only; the model call is
+# stubbed in the browser suite, so no provider credentials are involved.
 name: CI
 
 on:
@@ -96,3 +99,45 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: verify the published file set
         run: pnpm pack:check
+
+  e2e:
+    name: real host + browser e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: install a pinned DSH runtime
+        shell: bash
+        env:
+          DSH_VERSION: 0.2.2-rc.1
+        run: |
+          CLI_DIR="$RUNNER_TEMP/dsh-cli"
+          mkdir -p "$CLI_DIR"
+          cd "$CLI_DIR"
+          printf '{"name":"dsh-e2e-runtime","private":true}\n' > package.json
+          pnpm add "@deepseek-ai/dsh@${DSH_VERSION}"
+      - name: install chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: host e2e (bundle loads, real routes, fences)
+        env:
+          DSH_E2E_DSH_BIN: ${{ runner.temp }}/dsh-cli/node_modules/@deepseek-ai/dsh/lib/bin.js
+        run: pnpm test:e2e:host
+      - name: browser e2e (row, accept, reroll, settings switch)
+        env:
+          DSH_E2E_DSH_BIN: ${{ runner.temp }}/dsh-cli/node_modules/@deepseek-ai/dsh/lib/bin.js
+        run: pnpm test:e2e:browser
+      - name: upload the failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-e2e-failure
+          path: ${{ runner.temp }}/*.png
+          if-no-files-found: ignore
