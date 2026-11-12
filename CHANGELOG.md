@@ -11,6 +11,13 @@
 - 工程校验脚本：`scripts/check-release.mjs` 校验 `package.json`、`CHANGELOG.md` 与 git 标签三方一致；`scripts/check-pack.mjs` 校验 npm tarball 的文件清单（运行所需文件都在、测试/CI/开发文件都不在）。
 - 宿主侧单元测试：`lib/config.js`、`lib/generate.js`、`lib/http.js`、`lib/predictions.js` 现在有独立的 `node:test` 用例，覆盖率门槛落在 CI 里；`test/run-unit.mjs` 自己枚举测试文件，Windows 与 POSIX shell 行为一致。
 - Dependabot：每周检查 npm 依赖与 GitHub Actions 版本；minor/patch 自动开 PR，测试工具链（TypeScript / jsdom / React / `@types/node`）的 major 走手动升级。
+- 真实宿主端到端（`test/e2e-host.mjs`）：在临时 `DSH_HOME` 里用生成的 `web` profile `link:` 本仓库、启动真实 `dsh web`，验证插件确实被宿主加载、`/composer-prefill/prefs` 返回配置与 entry id、未打开会话的 predict 不触发模型调用，以及 405/403/400/16 KiB 围栏。
+- 浏览器端到端（`test/e2e-browser.mjs`，Playwright + headless Chromium）：在真实 DSH 界面里验证建议条从 `cached` 回放出现、点击填入草稿、清空后本地恢复且不再发请求、`↻` 发 `refresh` 换一条、`✕` 后打字再清空也不回来，以及设置 → 通用开关写穿到真实宿主。
+- `test:e2e` / `test:e2e:host` / `test:e2e:browser` 脚本；CI 与 release 流水线各加一个 e2e job（真实 Host 套件 + 浏览器套件），发版前多一道真机闸门。
+
+### Fixed
+
+- 设置 → 通用里的「输入预测」开关在真实 DSH 里其实**没有落盘**：`showPredictions` 没有标记 `volatile`，`@deepseek-ai/dsh-settings` 因此不会为本插件暴露设置命名空间，开关只停留在客户端乐观状态，写入被宿主拒绝。现在该字段改为 `.volatile()`，开关会写进 profile patch，宿主 `/composer-prefill/prefs` 即时反映（由浏览器 e2e 发现并回归）。其余 8 个调优字段仍走插件管理器的普通配置。
 
 ### Changed
 

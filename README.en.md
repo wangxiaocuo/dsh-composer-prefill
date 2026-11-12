@@ -116,6 +116,7 @@ pnpm typecheck        # tsc --checkJs (index.js + lib/**)
 pnpm test             # unit tests (node:test, Host lib + browser-half DOM)
 pnpm test:coverage    # coverage floor on lib/** (same flags as CI)
 pnpm test:smoke       # endpoint end-to-end (real Cordis wiring, scripted model)
+pnpm test:e2e         # real dsh web + headless Chromium end-to-end (below)
 pnpm pack:check       # verify the npm tarball file list
 pnpm verify           # all of the above; also runs on prepublishOnly
 ```
@@ -130,10 +131,20 @@ CI runs on GitHub Actions ([ci.yml](.github/workflows/ci.yml)) and releases are 
 | Unit tests + Host smoke test | Ubuntu Node 22 / 24, Windows Node 22 |
 | Coverage floor (`lib/**`) | Ubuntu Node 22 |
 | Package contents (`npm pack` file list) | Ubuntu Node 22 |
+| Real Host + browser e2e (throwaway `DSH_HOME`, pinned `dsh` runtime) | Ubuntu Node 22 |
 
 `npm run test:coverage` requires lines 95 / branches 90 / functions 95 on `lib/**`; `test/run-unit.mjs` enumerates `*.test.mjs` itself instead of relying on shell glob expansion, so Windows runs the same set of cases.
 
 The supported baseline is **Node 22.13+**: Node 20 reached end of life in April 2026, the pinned pnpm 11 cannot run on Node < 22.13 (`node:sqlite`), and the DSH runtime this plugin loads into ships Node 24. `engines.node` is therefore `>=22.13`.
+
+## End-to-end tests
+
+Both real-host suites share [test/e2e/harness.mjs](test/e2e/harness.mjs): it locates a runnable Harness CLI (the local desktop app, or the npm-installed `@deepseek-ai/dsh` that `DSH_E2E_DSH_BIN` points at), generates a `web` profile in a throwaway `DSH_HOME` with this repository `link:`-installed, boots the real `dsh web`, and redeems the launch token for a browser cookie.
+
+- [test/e2e-host.mjs](test/e2e-host.mjs): exercises the real HTTP surface — the bundle loads in a real Host, `/composer-prefill/prefs` returns the effective config and entry id, predicting for an unopened session makes no model call, and the 405/403/400 fences plus the 16 KiB body cap hold.
+- [test/e2e-browser.mjs](test/e2e-browser.mjs): Playwright + headless Chromium drives the real UI — the row appears from a `cached` replay, clicking fills the draft, clearing restores it locally without another request, `↻` sends `refresh` and swaps the text, `✕` suppresses it across typing/clearing, and the Settings → General switch writes through to the Host (the real `/composer-prefill/prefs` reports `enabled:false`).
+
+The browser suite fulfils `/composer-prefill/predict` through Playwright routing, so it verifies the **client state machine inside the real DSH shell** without spending a model call; the real endpoint is covered by the host suite. `pnpm test:e2e` needs a one-time `pnpm exec playwright install chromium`; with no runnable Harness it prints a skip message and exits 0.
 
 `client.js` is a DSH module-loader script (`window.__ModuleLoader__.load` + `factory(require)`) and cannot be imported as ESM, so it is **not typechecked**; its behaviour is covered by `test/client-dom.test.mjs` under jsdom.
 
@@ -152,7 +163,7 @@ Publishing uses npm Trusted Publishing (OIDC), so no `NPM_TOKEN` is required: ad
 - Latency is one real model call, roughly 1–3 seconds.
 - Targets the `0.2.2-rc.1` API generation; upgrades need a regression pass.
 - `client.js` is loaded directly by the Host loader and is outside `tsc --checkJs`; only the Host half (`index.js` + `lib/**`) is typechecked.
-- There is no browser e2e yet: CI covers the client state machine under jsdom and the Host endpoints with a scripted model, but "click it in a real DSH" still needs a manual pass before a release.
+- The browser e2e stubs the prediction response through route interception, so it does not cover real model output quality; model-call correctness stays covered by the unit tests and the scripted-model smoke test.
 
 ## Roadmap
 

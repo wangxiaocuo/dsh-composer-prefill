@@ -116,6 +116,7 @@ pnpm typecheck        # tsc --checkJs（index.js + lib/**）
 pnpm test             # 单元测试（node:test，含宿主 lib 与浏览器半 DOM）
 pnpm test:coverage    # 覆盖率门槛（lib/**，与 CI 同一套参数）
 pnpm test:smoke       # 宿主端点端到端（真实 Cordis 装配，桩模型）
+pnpm test:e2e         # 真实 dsh web + headless Chromium 的端到端（见下）
 pnpm pack:check       # 核对 npm tarball 的文件清单
 pnpm verify           # 以上全部；prepublishOnly 也跑这一条
 ```
@@ -130,10 +131,20 @@ CI 在 GitHub Actions 上跑（[ci.yml](.github/workflows/ci.yml)），发版由
 | 单元测试 + 宿主 smoke test | Ubuntu Node 22 / 24，Windows Node 22 |
 | 覆盖率门槛（`lib/**`） | Ubuntu Node 22 |
 | 打包内容（`npm pack` 文件清单） | Ubuntu Node 22 |
+| 真实 Host + 浏览器 e2e（临时 `DSH_HOME` + pinned `dsh` runtime） | Ubuntu Node 22 |
 
 `npm run test:coverage` 在 `lib/**` 上的门槛是行 95% / 分支 90% / 函数 95%；`test/run-unit.mjs` 自己枚举 `*.test.mjs`，不依赖 shell 展开 glob，所以 Windows 上跑的是同一批用例。
 
 支持基线是 **Node 22.13+**：Node 20 已于 2026 年 4 月 EOL，锁定的 pnpm 11 在 Node < 22.13 上无法运行（`node:sqlite`），而本插件实际运行的 DSH 运行时自带 Node 24。`engines.node` 已相应收紧到 `>=22.13`。
+
+## 端到端测试
+
+两个真实宿主套件共用 [test/e2e/harness.mjs](test/e2e/harness.mjs)：它定位一个可运行的 Harness CLI（本机桌面 App，或 `DSH_E2E_DSH_BIN` 指向 npm 安装的 `@deepseek-ai/dsh`），在临时 `DSH_HOME` 里生成 `web` profile 并 `link:` 本仓库，启动真实的 `dsh web`，再用启动 token 换浏览器 cookie。
+
+- [test/e2e-host.mjs](test/e2e-host.mjs)：走真实 HTTP 面——插件在真实 Host 里加载、`/composer-prefill/prefs` 返回配置与 entry id、未打开会话的 predict 不产生模型调用、405/403/400 围栏与 16 KiB 体积上限。
+- [test/e2e-browser.mjs](test/e2e-browser.mjs)：Playwright + headless Chromium 打开真实界面——建议条从 `cached` 回放出现、点击填入草稿、清空后本地恢复（不再发请求）、`↻` 发 `refresh` 换一条、`✕` 忽略后打字再清空也不回来，以及设置 → 通用的开关写穿到宿主（真实 `/composer-prefill/prefs` 读到 `enabled:false`）。
+
+浏览器套件用 Playwright 路由拦截 `/composer-prefill/predict` 的返回，所以它验的是**客户端状态机 + 真实 DSH 外壳**，不消耗模型调用；真实端点由 host 套件覆盖。`pnpm test:e2e` 需要一次 `pnpm exec playwright install chromium`，没有可用的 Harness 时会打印跳过信息并以 0 退出。
 
 `client.js` 是 DSH 的 module-loader 脚本（`window.__ModuleLoader__.load` + `factory(require)`），不能当 ESM 导入，因此**不参与 tsc 检查**；它的行为由 `test/client-dom.test.mjs` 在 jsdom 里覆盖。
 
@@ -152,7 +163,7 @@ CI 在 GitHub Actions 上跑（[ci.yml](.github/workflows/ci.yml)），发版由
 - 延迟：请求到显示约 1–3 秒（一次真实模型调用）。
 - 只面向 `0.2.2-rc.1` 这一代 API，升级需要回归。
 - `client.js` 是宿主 loader 直接加载的脚本，不在 `tsc --checkJs` 的检查范围内；类型检查只覆盖宿主半（`index.js` + `lib/**`）。
-- 还没有浏览器 e2e：CI 用 jsdom 覆盖客户端状态机、用桩模型覆盖宿主端点，但「真实 DSH 里点一下」仍需发版前手动回归。
+- 浏览器 e2e 把预测请求的返回用路由拦截桩掉，因此不覆盖真实模型输出质量；模型调用的正确性仍由单测与 smoke 的桩模型覆盖。
 
 ## 路线
 
