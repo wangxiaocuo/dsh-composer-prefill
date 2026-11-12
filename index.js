@@ -16,8 +16,14 @@ export const inject = ['sessions', 'connection', 'webServer', 'llm', 'agentDefau
  * description and a safe default.
  */
 export const Config = z.object({
+  // `.volatile()` is what makes this field part of the live settings document:
+  // `@deepseek-ai/dsh-settings` only exposes a namespace when its form has a
+  // volatile field, and the Settings → General row writes through that
+  // namespace. Without it the switch looks functional (optimistic state) but
+  // every write is rejected and the choice never persists.
   showPredictions: z
     .boolean()
+    .volatile()
     .default(true)
     .description(
       'Suggest the next message above the composer after an assistant turn. Each prediction costs one extra model call (roughly 2-4k input tokens); it never enters the transcript or the context window.',
