@@ -169,5 +169,6 @@ Publishing uses npm Trusted Publishing (OIDC), so no `NPM_TOKEN` is required: ad
 
 - 0.1.x: skeleton + suggestion row (M0/M1)
 - 0.2.0: real model call, cache/coalescing/throttling, cached replay on session switch, restore when the draft is cleared
-- **0.3.0**: `↻ another one`, a Settings → General switch
+- 0.3.0: `↻ another one`, a Settings → General switch
+- **0.3.1**: the switch actually persists (`volatile`); real host + browser e2e join CI and the release gate
 - 0.4.0 (optional): inline ghost text, candidate cycling on the row
