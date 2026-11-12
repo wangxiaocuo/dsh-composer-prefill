@@ -1,0 +1,67 @@
+{
+  "name": "@wangxiaocuo/dsh-composer-prefill",
+  "version": "0.2.0",
+  "description": "Codex-style composer predictions for DeepSeek Harness: suggest the next user message after an assistant turn and fill the composer on Tab.",
+  "license": "MIT",
+  "author": "wangxiaocuo",
+  "type": "module",
+  "engines": {
+    "node": ">=20",
+    "dsh": "^0.2.2-rc.1"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek",
+    "deepseek-harness",
+    "dsh-plugin",
+    "composer",
+    "prediction",
+    "prefill",
+    "ghost-text"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/*.js",
+    "prompt.txt",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.en.md"
+  ],
+  "dependencies": {
+    "@deepseek-ai/schemastery": "3.19.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:smoke": "node test/smoke-host.mjs",
+    "test:dom": "node --test test/client-dom.test.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "jsdom": "^27.4.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}

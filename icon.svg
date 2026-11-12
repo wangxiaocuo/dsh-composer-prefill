@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Composer prefill">
+  <rect x="6" y="13" width="52" height="38" rx="9" fill="#2f6fed" fill-opacity="0.12" stroke="#2f6fed" stroke-width="2.5"/>
+  <path d="M15 25h17" stroke="#2f6fed" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M15 36h34" stroke="#2f6fed" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="5 5" stroke-opacity="0.6"/>
+</svg>

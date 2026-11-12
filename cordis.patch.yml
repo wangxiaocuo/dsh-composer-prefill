@@ -1,0 +1,3 @@
+- insert:
+    - id: composer-prefill
+      name: '@wangxiaocuo/dsh-composer-prefill'

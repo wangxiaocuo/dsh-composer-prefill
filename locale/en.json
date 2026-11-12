@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Composer predictions",
+    "description": "Suggests the next user message above the composer after an assistant turn; Tab or click fills it in without sending."
+  }
+}

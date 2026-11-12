@@ -1,0 +1,109 @@
+# 输入预测 · Composer prefill
+
+给 DeepSeek Harness 的 Codex 风格「输入预测」：助手回复结束后，在输入框上方建议**下一条你会打的消息**。按 `Tab` 或点击填入草稿，**不会自动发送**。
+
+`@wangxiaocuo/dsh-composer-prefill`
+
+---
+
+## 它做什么
+
+| 时机 | 行为 |
+|---|---|
+| 助手回复结束、且输入框为空 | 出现一条建议（单行，同语言，≤120 字符） |
+| 按 `Tab` / 点击文字 | 填入草稿，不发送；可继续编辑 |
+| 按 `Esc` / 点击 `✕` | 本轮不再出现（打字再删空也不会回来，直到下一轮） |
+| 开始打字 | 立刻隐藏，并中止正在进行的请求（省 token） |
+| 把刚打的字删空 | 建议**立刻**回来（本地恢复，不发请求） |
+| 切到别的会话再切回 | 立刻回来（读宿主缓存，**零模型调用**） |
+| 提交发送 | 等这一轮结束再给下一条建议 |
+| 模型判断没有合理的下一句 | 输出 `NONE`，什么都不显示 |
+
+界面就是输入卡上方的一条淡色建议（`conversation.input.dock`，order 15），带 `↵` 前缀、`Tab` 键帽和 `✕`。
+
+## 安装
+
+本机已通过 Plugin Manager 安装（`link:` 到本仓库）。重新安装或换机器：
+
+```
+设置 → 插件 → 安装 → 填本目录的绝对路径
+```
+
+安装后在 **设置 → 插件 → 输入预测 → 配置** 里能看到全部 9 个字段。
+
+## 工作方式
+
+```
+浏览器 client 半                                   宿主 host 半
+┌──────────────────────────────┐   POST 同源     ┌─────────────────────────────┐
+│ conversation.input.dock 建议条 │ ─────────────▶ │ /composer-prefill/predict    │
+│ useInput / useSessionStatus   │                │  Host/Origin 围栏 + owner 校验 │
+│ AbortController（打字即取消）  │ ◀───────────── │  按 (session, seq) 的 LRU 缓存 │
+│ inputActions.insertText(span) │  {enabled,text}│  deriveMessages() 截最近 N 轮  │
+└──────────────────────────────┘                │  ctx.llm 一次小调用（跟随会话）│
+                                                └─────────────────────────────┘
+```
+
+两个模式：
+
+| 请求 | 含义 |
+|---|---|
+| `{sessionId}` | 回合结束后的正常请求；缓存未命中才会真的调用模型 |
+| `{sessionId, mode:"cached"}` | 只读缓存：会话重新挂载时用，命中即回显，**永不生成** |
+
+`Tab` 是受保护的增强：bubble 阶段监听，只在建议可见、焦点在 `[data-composer-card]` 内、非 IME、无修饰键、且没有被斜杠/`@` 菜单消费（`defaultPrevented`）时才 `preventDefault`。点击接受是主路径。
+
+## 配置
+
+| 字段 | 默认 | 说明 |
+|---|---|---|
+| `showPredictions` | `true` | 总开关。关掉后零模型调用 |
+| `provider` / `model` | `""` | 留空跟随当前会话；两个都填才生效 |
+| `maxContextTurns` | `4` | 喂给预测的最近轮数 |
+| `maxInputChars` | `4000` | 上下文总字符上限 |
+| `maxOutputTokens` | `64` | 输出 token 上限 |
+| `timeoutMs` | `8000` | 超时即放弃（超时=不显示） |
+| `minIntervalMs` | `1500` | 两次请求的最小间隔 |
+| `debug` | `false` | 往宿主日志打 `[composer-prefill]` 诊断 |
+
+## 成本与隐私
+
+- **只为你正在看的那个会话生成**：没打开的会话永远不花调用。
+- 每轮多一次约 2–4k input tokens、几十 output tokens 的请求；**不进会话记录、不进 token meter、不占上下文窗口**，但 provider 照常计费。
+- 上下文只取最近 N 轮的 `user`/`assistant` **纯文本**（剥掉工具结果、图片、附件、reasoning），跟随会话自己的 provider/model，不跨 provider。
+- 输出不可信：只取首行、去引号、限长，且**只能由你显式接受**，绝不自动发送。
+
+## 提示词
+
+系统提示词在 [`prompt.txt`](prompt.txt)，每次调用按 mtime 现读——改完**下一轮立即生效，不需要重启**。文件缺失或为空时回退到内置提示。
+
+## 开发
+
+```
+index.js            宿主：Config + 路由注册
+lib/http.js         同源端点、围栏/owner/CSRF 校验、请求体读取
+lib/predictions.js  缓存、请求合并、限流、RPC handler
+lib/generate.js     一次性 ctx.llm 调用（路由解析、上下文、输出消毒）
+lib/prompt.js       上下文裁剪、输出消毒、提示词热读
+lib/config.js       配置读取（兼容 schemastery ref 与普通值）
+client.js           浏览器半：建议条、触发状态机、Tab/Esc、接受
+prompt.txt          系统提示词
+test/               宿主 smoke、提示词单测、浏览器半 DOM 行为测试
+```
+
+- `client.js` 改动：刷新页面即可。
+- `index.js` / `lib/*.js` 改动：**退出并重新打开应用**。这套桌面构建没有宿主侧模块热替换，Node 的 ESM 缓存不会因文件变化而失效。
+- 测试：`npm test`（提示词单测 + 浏览器半行为测试）· `npm run test:smoke`（宿主端点端到端，桩模型）
+
+## 已知限制
+
+- 建议在**输入框上方**，不是光标处的内联幽灵文本（那需要测量/克隆 Lexical 编辑器 DOM，主题/缩放会坏）。
+- `Tab` 依赖 `[data-composer-card]` 这一内部 DOM 约定，DSH 升级需要回归。
+- 延迟：请求到显示约 1–3 秒（一次真实模型调用）。
+- 只面向 `0.2.2-rc.1` 这一代 API，升级需要回归。
+
+## 路线
+
+- 0.1.x：骨架 + 建议条（M0/M1）
+- **0.2.0**：真模型调用、缓存/合并/限流、切会话缓存回显、清空草稿恢复
+- 0.3.0（可选）：`↻ 换一条`、设置→通用 一行开关、内联幽灵文本
