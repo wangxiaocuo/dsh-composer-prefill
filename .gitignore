@@ -1,4 +1,31 @@
+# Dependencies
 node_modules/
 .pnpm-store/
-.DS_Store
+
+# Test and coverage output
+coverage/
+*.tsbuildinfo
+
+# Package tarballs
+*.tgz
+
+# Logs
 *.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Local DeepSeek Harness data (sessions, profiles, trash)
+.dsh/
+.session-trash/
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Temporary files
+*.tmp
+*.temp
+tmp/

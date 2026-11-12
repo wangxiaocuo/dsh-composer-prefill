@@ -1,0 +1,98 @@
+# Unit tests, DOM tests, host smoke test, coverage, and package contents.
+#
+# The compatibility matrix is Ubuntu Node 22/24 plus Windows Node 22. Node 20 is
+# deliberately absent: it reached end of life in April 2026, the pinned pnpm 11
+# refuses to run on Node < 22.13 (`node:sqlite`), and the DSH runtime this
+# plugin loads into ships Node 24. Windows contributes the cross-platform signal
+# on the current LTS baseline; platform-specific cases either inject a seam or
+# skip with an explicit reason.
+#
+# The real-desktop end-to-end suite is intentionally not part of CI: this
+# package has no e2e suite yet. Add a job for it once `test:e2e` exists.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: unit + dom + smoke (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            node: 22
+          - os: ubuntu-latest
+            node: 24
+          - os: windows-latest
+            node: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      # `pnpm test` already runs every `*.test.mjs`, including client-dom.test.mjs.
+      - name: unit tests
+        shell: bash
+        run: pnpm test 2>&1 | tee unit.log
+      - name: annotate unit failures
+        if: failure()
+        shell: bash
+        run: |
+          if [ ! -f unit.log ]; then exit 0; fi
+          grep -aE "✖|not ok|AssertionError|Error:|expected|actual|Uncaught" unit.log | head -60 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
+          exit 0
+      - run: pnpm test:smoke
+
+  coverage:
+    name: coverage (node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: coverage over lib (thresholds)
+        run: pnpm test:coverage
+
+  pack:
+    name: package contents
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: verify the published file set
+        run: pnpm pack:check
