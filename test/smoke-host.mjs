@@ -320,4 +320,34 @@ async function call(harnessed, options = {}) {
   console.log('ok failing generator -> text null')
 }
 
+// 9. The attempt counter rises on rerolls and resets for a new turn.
+{
+  const { ctx, session } = harness()
+  const seen = []
+  const predictions = createPredictions(ctx, { showPredictions: true, minIntervalMs: 0 }, {
+    generate: (target, _signal, context) => {
+      seen.push({ seq: target.seq, attempt: context.attempt })
+      return Promise.resolve(`suggestion ${context.attempt}`)
+    },
+  })
+
+  const first = await predictions.handle({ sessionId: 's1' }, undefined)
+  assert.equal(first.value.text, 'suggestion 1', 'the first request is attempt 1')
+
+  const rerolled = await predictions.handle({ sessionId: 's1', mode: 'refresh' }, undefined)
+  assert.equal(rerolled.value.text, 'suggestion 2', 'a reroll is attempt 2')
+
+  const again = await predictions.handle({ sessionId: 's1', mode: 'refresh' }, undefined)
+  assert.equal(again.value.text, 'suggestion 3', 'further rerolls keep counting')
+
+  session.seq = 43
+  await predictions.handle({ sessionId: 's1' }, undefined)
+  assert.deepEqual(
+    seen.map((entry) => entry.attempt),
+    [1, 2, 3, 1],
+    'a new turn starts again at attempt 1',
+  )
+  console.log('ok attempts: 1 -> 2 -> 3, reset on a new turn')
+}
+
 console.log('\nhost smoke: all checks passed')

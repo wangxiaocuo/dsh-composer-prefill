@@ -22,6 +22,7 @@ const LABELS = {
   accept: '填入这条建议',
   dismiss: '忽略这条建议',
   another: '换一条',
+  thinking: '换一条中…',
 }
 
 const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
@@ -49,6 +50,8 @@ const calls = []
 let predictReplies = []
 /** Reply for `/prefs`. */
 let prefsReply = { enabled: true, entryId: ENTRY_ID }
+/** Resolver of a deliberately pending `/predict` reply, when one is queued. */
+let releasePending = null
 /** Every `configForms` write the settings row made. */
 const writes = []
 /** Value the fake config form currently reports. */
@@ -57,12 +60,14 @@ let storedEnabled = true
 globalThis.fetch = async (url, init) => {
   const target = String(url)
   calls.push({ url: target, body: init?.body === undefined ? undefined : JSON.parse(init.body) })
-  const value = target.endsWith('/prefs')
-    ? prefsReply
-    : predictReplies.length > 0
-      ? predictReplies.shift()
-      : { enabled: true, text: null }
-  return { ok: true, status: 200, json: async () => ({ ok: true, value }) }
+  if (target.endsWith('/prefs')) return { ok: true, status: 200, json: async () => ({ ok: true, value: prefsReply }) }
+  const next = predictReplies.length > 0 ? predictReplies.shift() : { enabled: true, text: null }
+  if (next.deferred === true) {
+    return new Promise((resolve) => {
+      releasePending = () => resolve({ ok: true, status: 200, json: async () => ({ ok: true, value: next.value }) })
+    })
+  }
+  return { ok: true, status: 200, json: async () => ({ ok: true, value: next }) }
 }
 
 const configForm = {
@@ -198,6 +203,7 @@ function mountSettings() {
 test.beforeEach(() => {
   calls.length = 0
   writes.length = 0
+  releasePending = null
   predictReplies = []
   prefsReply = { enabled: true, entryId: ENTRY_ID }
   storedEnabled = true
@@ -249,20 +255,24 @@ test('a finished turn generates once, and a new turn replaces the text', async (
   await row.teardown()
 })
 
-test('the reroll button asks for a refresh and replaces the text', async () => {
+test('the reroll button shows progress, asks for a refresh and replaces the text', async () => {
   const row = mountRow()
   predictReplies.push({ enabled: true, text: SUGGESTION_A })
   await row.render()
 
   const reroll = document.querySelector('button[data-composer-prefill-reroll]')
   assert.ok(reroll, 'the reroll button exists')
-  predictReplies.push({ enabled: true, text: SUGGESTION_C })
+  predictReplies.push({ deferred: true, value: { enabled: true, text: SUGGESTION_C } })
   await React.act(async () => {
     reroll.click()
   })
-  await flush()
-
   assert.deepEqual(calls.at(-1).body, { sessionId: SESSION, mode: 'refresh' }, 'reroll asks for a refresh')
+  assert.match(row.text(), new RegExp(LABELS.thinking), 'the row shows progress while rerolling')
+
+  await React.act(async () => {
+    releasePending()
+  })
+  await flush()
   assert.match(row.text(), new RegExp(SUGGESTION_C), 'the rerolled text replaces the old one')
   await row.teardown()
 })

@@ -12,7 +12,7 @@ Codex-style composer predictions for DeepSeek Harness: after an assistant turn e
 |---|---|
 | Assistant turn ended, composer empty | One suggestion appears (single line, conversation language, ≤120 chars) |
 | `Tab` / click the text | Fills the draft; nothing is sent |
-| `↻` | Another one: force a fresh generation (skips the cache and the interval, one model call); an empty result keeps the current text |
+| `↻` | Another one: force a fresh generation (skips the cache and the interval, one model call) with a "Asking for another…" progress state; an empty result keeps the current text |
 | `Esc` / `✕` | Hidden for this turn (typing and clearing will not bring it back until the next turn) |
 | Start typing | Hides immediately and aborts the in-flight request (saves tokens) |
 | Delete what you typed | The suggestion returns **instantly** from local state, no request |
@@ -51,7 +51,7 @@ Two request modes:
 |---|---|
 | `{sessionId}` | Normal request after a turn; the model is called only on a cache miss |
 | `{sessionId, mode:"cached"}` | Cache-only replay used when a session view remounts: instant on a hit, **never generates** |
-| `{sessionId, mode:"refresh"}` | `↻ Another one`: bypasses the cache and the interval, and replaces the cached entry |
+| `{sessionId, mode:"refresh"}` | `↻ Another one`: bypasses the cache and the interval and replaces the cached entry; the Host counts `attempt` and, from the second one, asks the model for a different angle instead of repeating the obvious answer |
 
 A second endpoint, `POST /composer-prefill/prefs`, tells the General settings row whether predictions are on and which Loader entry id owns the config form; the write goes through DSH's own `configForms`, the same document the Plugin Manager's form edits.
 

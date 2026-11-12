@@ -42,7 +42,9 @@
     "locale/*.json",
     "icon.svg",
     "README.md",
-    "README.en.md"
+    "README.en.md",
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "dependencies": {
     "@deepseek-ai/schemastery": "3.19.0"

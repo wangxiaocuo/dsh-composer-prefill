@@ -33,6 +33,7 @@ window.__ModuleLoader__.load({
         accept: 'Insert this suggestion',
         dismiss: 'Dismiss this suggestion',
         another: 'Another suggestion',
+        thinking: 'Asking for another…',
         settingsTitle: 'Composer predictions',
         settingsDescription: 'Suggest the next message above the composer after a reply. Each suggestion costs one extra model call.',
         settingsUnavailable: 'Available once the Host plugin is running.',
@@ -41,6 +42,7 @@ window.__ModuleLoader__.load({
         accept: '填入这条建议',
         dismiss: '忽略这条建议',
         another: '换一条',
+        thinking: '换一条中…',
         settingsTitle: '输入预测',
         settingsDescription: '助手回复后在输入框上方建议下一条消息。每条建议会多一次模型调用。',
         settingsUnavailable: '宿主插件运行后可用。',
@@ -278,6 +280,7 @@ window.__ModuleLoader__.load({
 
       const [suggestion, setSuggestion] = React.useState(null)
       const [busy, setBusy] = React.useState(false)
+      const [rerolling, setRerolling] = React.useState(false)
       const abortRef = React.useRef(null)
       const previousRunning = React.useRef(running)
       const previousIdleEmpty = React.useRef(false)
@@ -302,6 +305,7 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         if (!running) return
         setSuggestion(null)
+        setRerolling(false)
         lastSuggestionRef.current = null
       }, [running])
 
@@ -327,6 +331,7 @@ window.__ModuleLoader__.load({
               if (abortRef.current !== controller) return
               abortRef.current = null
               setBusy(false)
+              setRerolling(false)
               if (text !== null) {
                 lastSuggestionRef.current = text
                 setSuggestion(text)
@@ -336,6 +341,7 @@ window.__ModuleLoader__.load({
               if (abortRef.current === controller) {
                 abortRef.current = null
                 setBusy(false)
+                setRerolling(false)
               }
             })
         },
@@ -370,7 +376,7 @@ window.__ModuleLoader__.load({
       const visible = suggestion !== null && idleEmpty
 
       const accept = React.useCallback(() => {
-        if (suggestion === null) return
+        if (suggestion === null || rerolling) return
         const actions = inputActions ?? {}
         abort()
         if (typeof actions.captureInsertion === 'function' && typeof actions.insertText === 'function') {
@@ -378,7 +384,7 @@ window.__ModuleLoader__.load({
           if (actions.insertText(suggestion, span) && typeof actions.persistDraft === 'function') actions.persistDraft()
         }
         setSuggestion(null)
-      }, [abort, inputActions, suggestion])
+      }, [abort, inputActions, rerolling, suggestion])
 
       const dismiss = React.useCallback(() => {
         dismissedRef.current = true
@@ -389,6 +395,7 @@ window.__ModuleLoader__.load({
       const reroll = React.useCallback(() => {
         if (busy) return
         dismissedRef.current = false
+        setRerolling(true)
         request(MODE_REFRESH)
       }, [busy, request])
 
@@ -421,6 +428,9 @@ window.__ModuleLoader__.load({
       const acceptLabel = typeof t === 'function' ? t('accept') : suggestion
       const dismissLabel = typeof t === 'function' ? t('dismiss') : 'dismiss'
       const anotherLabel = typeof t === 'function' ? t('another') : 'another'
+      const thinkingLabel = typeof t === 'function' ? t('thinking') : '…'
+      const displayText = rerolling ? thinkingLabel : suggestion
+      const textStyle = rerolling ? { ...STYLE.text, color: 'var(--dsw-alias-label-tertiary)', cursor: 'default' } : STYLE.text
 
       return h(
         'div',
@@ -433,13 +443,14 @@ window.__ModuleLoader__.load({
             'button',
             {
               type: 'button',
-              title: suggestion,
+              title: displayText,
               'aria-label': acceptLabel,
-              style: STYLE.text,
+              disabled: rerolling,
+              style: textStyle,
               onMouseDown: (event) => event.preventDefault(),
               onClick: accept,
             },
-            suggestion,
+            displayText,
           ),
           h('kbd', { style: STYLE.keycap, 'aria-hidden': true }, 'Tab'),
           h(
