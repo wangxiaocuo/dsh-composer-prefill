@@ -4,6 +4,9 @@ Codex-style composer predictions for DeepSeek Harness: after an assistant turn e
 
 `@wangxiaocuo/dsh-composer-prefill`
 
+[![npm](https://img.shields.io/npm/v/@wangxiaocuo/dsh-composer-prefill?label=npm)](https://www.npmjs.com/package/@wangxiaocuo/dsh-composer-prefill)
+[![license](https://img.shields.io/npm/l/@wangxiaocuo/dsh-composer-prefill)](LICENSE)
+
 ---
 
 ## Behaviour
@@ -24,10 +27,18 @@ The UI is one muted row above the composer card (`conversation.input.dock`, orde
 
 ## Install
 
-Already installed on this machine through the Plugin Manager (`link:` to this repository). Elsewhere:
+Published on npm: <https://www.npmjs.com/package/@wangxiaocuo/dsh-composer-prefill>
+
+**From npm (for everyone else)**
 
 ```
-Settings → Plugins → Install → absolute path to this directory
+Settings → Plugins → Install  →  @wangxiaocuo/dsh-composer-prefill
+```
+
+**Local checkout (how this machine runs it)**
+
+```
+Settings → Plugins → Install  →  absolute path to this repository
 ```
 
 **Settings → General** then carries a "Composer predictions" switch (applies immediately), and the nine tunables appear under **Settings → Plugins → Composer predictions → Configuration**.

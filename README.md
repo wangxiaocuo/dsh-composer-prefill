@@ -4,6 +4,9 @@
 
 `@wangxiaocuo/dsh-composer-prefill`
 
+[![npm](https://img.shields.io/npm/v/@wangxiaocuo/dsh-composer-prefill?label=npm)](https://www.npmjs.com/package/@wangxiaocuo/dsh-composer-prefill)
+[![license](https://img.shields.io/npm/l/@wangxiaocuo/dsh-composer-prefill)](LICENSE)
+
 ---
 
 ## 它做什么
@@ -24,10 +27,18 @@
 
 ## 安装
 
-本机已通过 Plugin Manager 安装（`link:` 到本仓库）。重新安装或换机器：
+已发布到 npm：<https://www.npmjs.com/package/@wangxiaocuo/dsh-composer-prefill>
+
+**从 npm 安装（推荐给其他人）**
 
 ```
-设置 → 插件 → 安装 → 填本目录的绝对路径
+设置 → 插件 → 安装  →  填 @wangxiaocuo/dsh-composer-prefill
+```
+
+**本地开发（当前本机的方式）**
+
+```
+设置 → 插件 → 安装  →  填本仓库目录的绝对路径
 ```
 
 安装后在 **设置 → 通用** 里有一行「输入预测」开关（即时生效），**设置 → 插件 → 输入预测 → 配置** 里能看到全部 9 个字段。
