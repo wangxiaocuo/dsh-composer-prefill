@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-12
+
+### Changed
+
+- 文档（仅 README，无运行时代码变更）：中英文 README 顶部互加语言切换和仓库 / Issues / CHANGELOG / 许可链接；修正不准确描述——建议长度是提示词要求 ≤100 字符（代码硬上限 200）而不是 120，设置开关写入的是 DSH 的 settings 文档并落到 profile patch、覆盖插件管理器里的基础配置，e2e job 实际运行在 Node 24；架构图按中日韩字符的双列显示宽度重新对齐；用户向章节前置、维护者章节后置；补充运行环境、界面示意、已知限制和 MIT 许可段。
+
 ## [0.3.1] - 2026-11-12
 
 ### Added
@@ -99,7 +105,8 @@
   `defaultPrevented` checks), click-to-accept through `inputActions` with a
   `draftRev` CAS, `Esc`/`✕` dismissal.
 
-[Unreleased]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/wangxiaocuo/dsh-composer-prefill/releases/tag/v0.3.0
 

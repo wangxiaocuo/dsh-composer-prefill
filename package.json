@@ -1,6 +1,6 @@
 {
   "name": "@wangxiaocuo/dsh-composer-prefill",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Codex-style composer predictions for DeepSeek Harness: suggest the next user message after an assistant turn and fill the composer on Tab.",
   "license": "MIT",
   "author": "wangxiaocuo",
