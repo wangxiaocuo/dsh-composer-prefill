@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-13
+
 ### Added
 
 - 切回会话时的补预测（`view` 模式）：浏览器半在打开 / 切回会话时不再用 `cached`，改为发 `{sessionId, mode:"view"}`；宿主按会话记住上次被询问时的 seq，缓存命中当前 offset 就直接回显，检测到会话在你上次询问之后有了新记录（通常是那一轮在你查看别的会话时跑完）才补生成一条建议（只生成一次）。这次补生成只在有明确结果后才记为已询问：中途被中止（切走或开始打字）或被最小间隔拦下的那次不算，下次切回会重试。没询问过、没变化的会话仍然零模型调用；回合结束时的默认请求、`↻ 换一条`（`refresh`）和只读回放的 `cached` 模式不变。
@@ -113,7 +115,8 @@
   `defaultPrevented` checks), click-to-accept through `inputActions` with a
   `draftRev` CAS, `Esc`/`✕` dismissal.
 
-[Unreleased]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/wangxiaocuo/dsh-composer-prefill/releases/tag/v0.3.0
