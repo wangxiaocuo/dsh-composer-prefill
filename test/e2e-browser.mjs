@@ -39,8 +39,8 @@ import {
   writeWorkspaces,
 } from './e2e/harness.mjs'
 
-/** Text the mocked cached replay returns (the row must show exactly this). */
-const CACHED_TEXT = 'Cached suggestion text'
+/** Text the mocked view-mode reply returns (the row must show exactly this). */
+const VIEW_TEXT = 'View suggestion text'
 /** Text the mocked reroll returns; must differ so the replacement is provable. */
 const REFRESH_TEXT = 'Refresh suggestion text'
 /** Accessible names of the row controls, from the plugin's English dictionary. */
@@ -228,8 +228,10 @@ try {
   await writeProfile(home)
   const project = await createProject(home, 'project-e2e')
   const sessionId = 'session-e2e-idle'
+  const secondSessionId = 'session-e2e-second'
   await writeSession(home, sessionId, project, { title: 'Composer prefill e2e' })
-  await writeWorkspaces(home, [{ id: 'ws-e2e', path: project, sessionIds: [sessionId] }])
+  await writeSession(home, secondSessionId, project, { title: 'Composer prefill e2e second' })
+  await writeWorkspaces(home, [{ id: 'ws-e2e', path: project, sessionIds: [sessionId, secondSessionId] }])
 
   server = await startServer(home, { runtime })
   const api = await createApi(server.url)
@@ -262,7 +264,7 @@ try {
       const body = route.request().postDataJSON()
       predictRequests.push(body !== null && typeof body === 'object' ? body : {})
       const mode = body !== null && typeof body === 'object' ? body.mode : undefined
-      const text = mode === 'refresh' ? REFRESH_TEXT : CACHED_TEXT
+      const text = mode === 'refresh' ? REFRESH_TEXT : VIEW_TEXT
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -271,8 +273,9 @@ try {
     })
 
     await page.goto(server.url, { waitUntil: 'domcontentloaded' })
-    // The app auto-opens a brand-new session; the seeded sidebar session is only
-    // there so the shell has real content. Never click it.
+    // The app auto-opens a throwaway blank session; the seeded sidebar sessions
+    // are the real ones this suite switches between (the unused blank draft is
+    // discarded by the shell when switching away, so it cannot be clicked back).
     const composer = page.locator('[data-composer-card]').first()
     await composer.waitFor({ state: 'visible', timeout: 20_000 })
     await settleStartupDialogs(page)
@@ -280,30 +283,35 @@ try {
     const row = page.locator('[data-composer-prefill]')
     await row.first().waitFor({ state: 'visible', timeout: 10_000 })
 
-    // 1. The row appears on mount, fed by exactly one cached replay request.
+    // 1. The row appears on mount, fed by exactly one mode:view request.
     await sleep(300) // let any late duplicate mount request surface before counting
-    const cached = predictRequests.filter((request) => request.mode === 'cached')
-    assert.equal(cached.length, 1, `expected exactly one cached replay request, got ${JSON.stringify(predictRequests)}`)
+    const views = predictRequests.filter((request) => request.mode === 'view')
+    assert.equal(views.length, 1, `expected exactly one mode:view request, got ${JSON.stringify(predictRequests)}`)
     assert.equal(predictRequests.length, 1, `expected no other predict request on mount, got ${JSON.stringify(predictRequests)}`)
-    assert.equal(typeof cached[0].sessionId, 'string', 'the cached request must name a session')
-    assert.ok(cached[0].sessionId.length > 0, 'the cached request sessionId must be non-empty')
+    assert.equal(
+      predictRequests.filter((request) => request.mode === 'cached').length,
+      0,
+      'mount must not send the retired mode:cached request',
+    )
+    assert.equal(typeof views[0].sessionId, 'string', 'the view request must name a session')
+    assert.ok(views[0].sessionId.length > 0, 'the view request sessionId must be non-empty')
     assert.equal(await row.count(), 1, 'exactly one suggestion row')
-    assert.match(await row.first().innerText(), new RegExp(CACHED_TEXT), 'the row shows the cached text')
-    pass('the row appears on mount from one cached replay request for a real session id')
+    assert.match(await row.first().innerText(), new RegExp(VIEW_TEXT), 'the row shows the view-mode text')
+    pass('the row appears on mount from exactly one mode:view request for a real session id')
 
     // 2. Accept fills the real Lexical composer and hides the row.
     await page.getByRole('button', { name: ACCEPT_NAME }).click()
     await row.first().waitFor({ state: 'detached', timeout: 5_000 })
     const composerText = await composer.innerText()
-    assert.ok(composerText.includes(CACHED_TEXT), `the composer should contain the suggestion, got ${JSON.stringify(composerText)}`)
-    assert.equal(await page.locator('[contenteditable="true"]').first().innerText(), CACHED_TEXT, 'the editable holds the inserted text')
+    assert.ok(composerText.includes(VIEW_TEXT), `the composer should contain the suggestion, got ${JSON.stringify(composerText)}`)
+    assert.equal(await page.locator('[contenteditable="true"]').first().innerText(), VIEW_TEXT, 'the editable holds the inserted text')
     pass('accept inserts the suggestion into the Lexical composer and removes the row')
 
     // 3. Clearing the draft restores the held suggestion with no Host request.
     await clearComposer(page)
     await row.first().waitFor({ state: 'visible', timeout: 5_000 })
     assert.equal(predictRequests.length, 1, `clearing must not refetch, got ${JSON.stringify(predictRequests)}`)
-    assert.match(await row.first().innerText(), new RegExp(CACHED_TEXT), 'the restored row keeps the same text')
+    assert.match(await row.first().innerText(), new RegExp(VIEW_TEXT), 'the restored row keeps the same text')
     pass('clearing the composer restores the held suggestion locally without a predict request')
 
     // 4. Typing hides the row immediately; clearing restores it locally again.
@@ -324,11 +332,11 @@ try {
       message: 'one refresh predict request',
     })
     assert.equal(predictRequests.filter((request) => request.mode === 'refresh').length, 1, 'exactly one reroll request')
-    assert.equal(predictRequests.filter((request) => request.mode === 'cached').length, 1, 'reroll must not add a cached replay')
+    assert.equal(predictRequests.filter((request) => request.mode === 'view').length, 1, 'reroll must not add a view request')
     await waitFor(
       async () => {
         const text = await row.first().innerText().catch(() => '')
-        return text.includes(REFRESH_TEXT) && !text.includes(CACHED_TEXT)
+        return text.includes(REFRESH_TEXT) && !text.includes(VIEW_TEXT)
       },
       { timeout: 5_000, message: 'the row to show the refreshed text' },
     )
@@ -348,7 +356,29 @@ try {
     assert.equal(predictRequests.length, requestCountAfterReroll, `dismiss-then-clear must not fetch, got ${JSON.stringify(predictRequests)}`)
     pass('dismiss hides the row and typing then clearing neither restores it nor fetches')
 
-    // 7. Settings → General mirrors and persists the master switch through the Host.
+    // 7. Switching sessions remounts the row and asks the Host in mode:view each
+    // time; switching back is the "turn finished while I was elsewhere" path.
+    // Seeded sidebar rows carry a stable `data-row-key="session:<id>"`.
+    const switchTo = async (targetSessionId) => {
+      const viewCount = predictRequests.filter(
+        (request) => request.sessionId === targetSessionId && request.mode === 'view',
+      ).length
+      await page.locator(`[data-row-key="session:${targetSessionId}"]`).first().click()
+      await waitFor(
+        () =>
+          predictRequests.filter((request) => request.sessionId === targetSessionId && request.mode === 'view').length ===
+          viewCount + 1,
+        { timeout: 10_000, message: `a mode:view request for session ${targetSessionId}` },
+      )
+      await row.first().waitFor({ state: 'visible', timeout: 5_000 })
+      assert.match(await row.first().innerText(), new RegExp(VIEW_TEXT), 'the switched-to session shows a suggestion')
+    }
+    await switchTo(sessionId)
+    await switchTo(secondSessionId)
+    await switchTo(sessionId)
+    pass('switching sessions re-asks the Host in mode:view and shows a suggestion each time')
+
+    // 8. Settings → General mirrors and persists the master switch through the Host.
     await page.getByRole('button', { name: /^Account menu/ }).click()
     await page.getByText('Settings', { exact: true }).first().click()
     const settingsDialog = page.getByRole('dialog').first()
@@ -389,7 +419,7 @@ try {
     )
     pass('the General switch shows checked and persists both directions through the real Host')
 
-    // 8. Nothing on the page threw during the whole run.
+    // 9. Nothing on the page threw during the whole run.
     assert.deepEqual(pageErrors, [], `uncaught page errors: ${JSON.stringify(pageErrors)}`)
     pass('no uncaught page errors during the run')
 

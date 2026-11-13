@@ -1,13 +1,13 @@
 /**
  * Unit tests for `lib/predictions.js`: cache, replay, coalescing, throttling,
- * rerolls, attempt counting and both RPC handlers.
+ * the view advance credit, rerolls, attempt counting and both RPC handlers.
  *
  * The `generate` test seam keeps every case hermetic — no model is ever called.
  */
 
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { MODE_CACHED, MODE_REFRESH, createPredictions } from '../lib/predictions.js'
+import { MODE_CACHED, MODE_REFRESH, MODE_VIEW, createPredictions } from '../lib/predictions.js'
 
 /**
  * @param {string} id session id.
@@ -176,6 +176,129 @@ test('mode "cached" replays only a cache entry from the same offset', async () =
   const stale = await policy.handle({ sessionId: 's1', mode: MODE_CACHED }, undefined)
   assert.deepEqual(stale.value, { enabled: true, text: null }, 'a suggestion from an older turn is not replayed')
   assert.equal(calls.length, 1, 'a stale lookup still costs no model call')
+})
+
+test('mode "view" on a session never asked about serves nothing and costs no call', async () => {
+  const { predictions, calls } = makePredictions()
+  const result = await predictions.handle({ sessionId: 's1', mode: MODE_VIEW }, undefined)
+  assert.deepEqual(result.value, { enabled: true, text: null }, 'a first view has nothing to show')
+  assert.equal(calls.length, 0, 'a first view never reaches the generator')
+})
+
+test('mode "view" generates once the session advanced past the last ask', async () => {
+  const session = makeSession('s1', 1)
+  const map = new Map([['s1', session]])
+  const calls = []
+  const policy = createPredictions({ sessions: { get: (id) => map.get(id) } }, { showPredictions: true, minIntervalMs: 0 }, {
+    generate: (target) => {
+      calls.push(target.seq)
+      return Promise.resolve(`suggestion for turn ${target.seq}`)
+    },
+  })
+
+  // The browser's mount ask records the offset without generating anything.
+  const mount = await policy.handle({ sessionId: 's1', mode: MODE_CACHED }, undefined)
+  assert.deepEqual(mount.value, { enabled: true, text: null })
+  assert.equal(calls.length, 0, 'the mount ask costs no model call')
+
+  session.seq = 3
+  const viewed = await policy.handle({ sessionId: 's1', mode: MODE_VIEW }, undefined)
+  assert.deepEqual(viewed.value, { enabled: true, text: 'suggestion for turn 3' }, 'a turn finished while hidden is predicted')
+  assert.deepEqual(calls, [3], 'the view generated exactly once, for the new offset')
+})
+
+test('a second view at the same offset replays the cache', async () => {
+  const session = makeSession('s1', 1)
+  const map = new Map([['s1', session]])
+  const calls = []
+  const policy = createPredictions({ sessions: { get: (id) => map.get(id) } }, { showPredictions: true, minIntervalMs: 0 }, {
+    generate: () => {
+      calls.push('generate')
+      return Promise.resolve('warm suggestion')
+    },
+  })
+
+  await policy.handle({ sessionId: 's1', mode: MODE_CACHED }, undefined)
+  session.seq = 2
+  assert.equal((await policy.handle({ sessionId: 's1', mode: MODE_VIEW }, undefined)).value.text, 'warm suggestion')
+  assert.equal(calls.length, 1)
+
+  const replayed = await policy.handle({ sessionId: 's1', mode: MODE_VIEW }, undefined)
+  assert.deepEqual(replayed.value, { enabled: true, text: 'warm suggestion', cached: true })
+  assert.equal(calls.length, 1, 'the second view costs no model call')
+})
+
+test('mode "view" without a new turn returns nothing and costs no call', async () => {
+  const { predictions, calls } = makePredictions()
+  // The mount ask records the current offset; the session does not advance.
+  await predictions.handle({ sessionId: 's1', mode: MODE_CACHED }, undefined)
+  const viewed = await predictions.handle({ sessionId: 's1', mode: MODE_VIEW }, undefined)
+  assert.deepEqual(viewed.value, { enabled: true, text: null }, 'no new turn since the last ask')
+  assert.equal(calls.length, 0, 'an idle view never reaches the generator')
+})
+
+test('an aborted view does not consume the advance and the next view retries', async () => {
+  const session = makeSession('s1', 1)
+  const map = new Map([['s1', session]])
+  const calls = []
+  let controller
+  const policy = createPredictions({ sessions: { get: (id) => map.get(id) } }, { showPredictions: true, minIntervalMs: 0 }, {
+    generate: (_target, signal) => {
+      calls.push({ abortedAtCall: signal?.aborted === true })
+      // The browser switched away while the model call was still running.
+      if (calls.length === 1) controller.abort()
+      return Promise.resolve(calls.length === 1 ? null : 'retried suggestion')
+    },
+  })
+
+  // The mount ask records the offset without generating anything.
+  await policy.handle({ sessionId: 's1', mode: MODE_CACHED }, undefined)
+  session.seq = 2
+  controller = new AbortController()
+  const aborted = await policy.handle({ sessionId: 's1', mode: MODE_VIEW }, controller.signal)
+  assert.deepEqual(aborted.value, { enabled: true, text: null }, 'the interrupted view shows nothing')
+  assert.deepEqual(calls, [{ abortedAtCall: false }], 'the interrupted view did start one generation')
+
+  const retried = await policy.handle({ sessionId: 's1', mode: MODE_VIEW }, new AbortController().signal)
+  assert.deepEqual(retried.value, { enabled: true, text: 'retried suggestion' }, 'the next view retries the fill')
+  assert.deepEqual(calls, [{ abortedAtCall: false }, { abortedAtCall: false }], 'the retry generated exactly once')
+
+  const replayed = await policy.handle({ sessionId: 's1', mode: MODE_VIEW }, new AbortController().signal)
+  assert.deepEqual(replayed.value, { enabled: true, text: 'retried suggestion', cached: true })
+  assert.equal(calls.length, 2, 'the successful retry is now served from the cache')
+})
+
+test('mode "view" is throttled inside the minimum interval and retried after it', async () => {
+  const session = makeSession('s1', 1)
+  const map = new Map([['s1', session]])
+  const calls = []
+  const policy = createPredictions({ sessions: { get: (id) => map.get(id) } }, { showPredictions: true, minIntervalMs: 100 }, {
+    generate: (target) => {
+      calls.push(target.seq)
+      return Promise.resolve(`suggestion for turn ${target.seq}`)
+    },
+  })
+
+  assert.equal((await policy.handle({ sessionId: 's1' }, undefined)).value.text, 'suggestion for turn 1')
+  session.seq = 2
+  const throttled = await policy.handle({ sessionId: 's1', mode: MODE_VIEW }, undefined)
+  assert.deepEqual(throttled.value, { enabled: true, text: null }, 'a view inside the interval is dropped')
+  assert.deepEqual(calls, [1], 'the throttled view costs no model call')
+
+  // A drop must not consume the advance credit: once the interval passes the
+  // same switch-back retries for the new offset.
+  await new Promise((resolve) => setTimeout(resolve, 150))
+  const retried = await policy.handle({ sessionId: 's1', mode: MODE_VIEW }, undefined)
+  assert.deepEqual(retried.value, { enabled: true, text: 'suggestion for turn 2' }, 'the retry fills the new turn')
+  assert.deepEqual(calls, [1, 2], 'the retry generated exactly once')
+})
+
+test('mode "view" is free after a turn-end generation at the same offset', async () => {
+  const { predictions, calls } = makePredictions()
+  assert.equal((await predictions.handle({ sessionId: 's1' }, undefined)).value.text, 'suggestion 1')
+  const viewed = await predictions.handle({ sessionId: 's1', mode: MODE_VIEW }, undefined)
+  assert.deepEqual(viewed.value, { enabled: true, text: 'suggestion 1', cached: true })
+  assert.equal(calls.length, 1, 'the view replays the turn-end result instead of generating')
 })
 
 test('concurrent requests coalesce onto one generation', async () => {

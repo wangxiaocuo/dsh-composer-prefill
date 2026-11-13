@@ -24,7 +24,7 @@
 | 按 `Esc` / 点击 `✕` | 本轮不再出现（打字再删空也不会回来，直到下一轮） |
 | 开始打字 | 立刻隐藏，并中止正在进行的请求（省 token） |
 | 把刚打的字删空 | 建议**立刻**回来（本地恢复，不发请求） |
-| 切到别的会话再切回 | 立刻回来（读宿主缓存，**零模型调用**） |
+| 切到别的会话再切回 | 缓存里有当前这一轮的建议就立刻回显（**零模型调用**）；会话在上次询问之后有了新记录（通常是那一轮在后台跑完了），则补生成一条（约一次模型调用）；两者都没有时不显示，也不生成 |
 | 提交发送 | 等这一轮结束再给下一条建议 |
 | 模型判断没有合理的下一句 | 输出 `NONE`，什么都不显示 |
 
@@ -72,12 +72,13 @@
 └────────────────────────────────┘                └──────────────────────────────────┘
 ```
 
-三种请求：
+四种请求：
 
 | 请求 | 含义 |
 |---|---|
 | `{sessionId}` | 回合结束后的正常请求；缓存未命中才会真的调用模型 |
-| `{sessionId, mode:"cached"}` | 只读缓存：会话重新挂载时用，命中即回显，**永不生成** |
+| `{sessionId, mode:"view"}` | 打开 / 切回会话时用：缓存里有当前 offset 的建议就回显（零调用）；会话在你上次询问之后有了新记录（通常是那一轮在后台跑完了）才补生成一条；其余情况什么都不做 |
+| `{sessionId, mode:"cached"}` | 只读缓存回放（API 层；浏览器打开会话已改用 `view`）：命中即回显，**永不生成** |
 | `{sessionId, mode:"refresh"}` | `↻ 换一条`：跳过缓存和最小间隔强制重生成，结果覆盖缓存；host 会带上 `attempt` 计数，从第 2 次起要求模型换个角度而不是重复最显然的答案 |
 
 两个端点都注册在 `ctx.webServer` 的精确路径上，并经过同源/owner/CSRF 围栏。另有 `POST /composer-prefill/prefs` 供设置页那行开关读取「当前是否开启 + 本插件的 Loader entry id」；写入走 DSH 的 settings 文档，落进 profile 的 `cordis.patch.yml`，覆盖插件管理器里的基础配置。
@@ -101,7 +102,7 @@
 
 ## 成本与隐私
 
-- **只为你正在看的那个会话生成**：没打开的会话永远不花调用。
+- **只为你正在看的那个会话生成**：没打开的会话永远不花调用；在后台有了新记录的会话（通常是那一轮跑完了）也不会自己生成，你切回去的那一刻才补一条（一次调用）。
 - 每轮多一次约 2–4k input tokens、几十 output tokens 的请求；**不进会话记录、不进 token meter、不占上下文窗口**，但 provider 照常计费。
 - 上下文只取最近 N 轮的 `user`/`assistant` **纯文本**（剥掉工具结果、图片、附件、reasoning），跟随会话自己的 provider/model，不跨 provider。
 - 输出不可信：只取首行、去引号、限长，且**只能由你显式接受**，绝不自动发送。
@@ -117,7 +118,7 @@
 - 延迟：请求到显示约 1–3 秒（一次真实模型调用）。
 - 只面向 `0.2.2-rc.1` 这一代 API，升级需要回归。
 - `client.js` 是宿主 loader 直接加载的脚本，不在 `tsc --checkJs` 的检查范围内；类型检查只覆盖宿主半（`index.js` + `lib/**`）。
-- 浏览器 e2e 用路由拦截桩掉预测返回，因此不覆盖真实模型输出质量；它依赖插件英文 aria-label 与 DSH 的设置/弹窗 DOM，DSH 升级需要回归。
+- 浏览器 e2e 用路由拦截桩掉预测返回，因此不覆盖真实模型输出质量；它依赖插件英文 aria-label 与 DSH 的设置/弹窗/侧栏行 DOM，DSH 升级需要回归。
 
 ## 路线
 
@@ -125,7 +126,8 @@
 - 0.2.0：真模型调用、缓存/合并/限流、切会话缓存回显、清空草稿恢复
 - 0.3.0：`↻ 换一条`、设置 → 通用 一行开关
 - **0.3.1**：设置开关真正落盘（`volatile`）；真实宿主 + 浏览器 e2e 进入 CI 与发版闸门
-- 0.4.0（可选）：内联幽灵文本、建议条上的候选切换
+- 0.4.0：切回会话时的补预测（`view` 模式，后台跑完的回合在切回时补一条）
+- 0.5.0（可选）：内联幽灵文本、建议条上的候选切换
 
 ## 开发
 
@@ -178,7 +180,7 @@ CI 在 GitHub Actions 上跑（[ci.yml](.github/workflows/ci.yml)），发版由
 两个真实宿主套件共用 [test/e2e/harness.mjs](test/e2e/harness.mjs)：它定位一个可运行的 Harness CLI（本机桌面 App，或 `DSH_E2E_DSH_BIN` 指向 npm 安装的 `@deepseek-ai/dsh`），在临时 `DSH_HOME` 里生成 `web` profile 并 `link:` 本仓库，启动真实的 `dsh web`，再用启动 token 换浏览器 cookie。
 
 - [test/e2e-host.mjs](test/e2e-host.mjs)：走真实 HTTP 面——插件在真实 Host 里加载、`/composer-prefill/prefs` 返回配置与 entry id、设置文档里本插件的命名空间存在且开关双向落盘（写入 profile patch）、未打开会话的 predict 不产生模型调用、405/403/400 围栏与 16 KiB 体积上限。
-- [test/e2e-browser.mjs](test/e2e-browser.mjs)：Playwright + headless Chromium 打开真实界面——建议条从 `cached` 回放出现、点击填入草稿、清空后本地恢复（不再发请求）、`↻` 发 `refresh` 换一条、`✕` 忽略后打字再清空也不回来，以及设置 → 通用的开关写穿到宿主（真实 `/composer-prefill/prefs` 读到 `enabled:false`）。
+- [test/e2e-browser.mjs](test/e2e-browser.mjs)：Playwright + headless Chromium 打开真实界面——建议条从 `view` 请求回显出现、点击填入草稿、清空后本地恢复（不再发请求）、`↻` 发 `refresh` 换一条、`✕` 忽略后打字再清空也不回来，以及设置 → 通用的开关写穿到宿主（真实 `/composer-prefill/prefs` 读到 `enabled:false`）。
 
 浏览器套件用 Playwright 路由拦截 `/composer-prefill/predict` 的返回，所以它验的是**客户端状态机 + 真实 DSH 外壳**，不消耗模型调用；真实端点由 host 套件覆盖。`pnpm test:e2e` 需要一次 `pnpm exec playwright install chromium`，没有可用的 Harness 时会打印跳过信息并以 0 退出。
 

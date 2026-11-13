@@ -26,7 +26,7 @@ Codex-style composer predictions for DeepSeek Harness: after an assistant turn e
 | `Esc` / `✕` | Hidden for this turn (typing and clearing will not bring it back until the next turn) |
 | Start typing | Hides immediately and aborts the in-flight request (saves tokens) |
 | Delete what you typed | The suggestion returns **instantly** from local state, no request |
-| Switch away and back | Returns instantly from the Host cache — **zero model calls** |
+| Switch away and back | A cached suggestion for the current turn returns instantly — **zero model calls**; when the session gained new records since the last ask (usually a turn finished in the background), one is generated (about one model call); with neither, nothing shows and nothing is generated |
 | Submit | The next turn's suggestion arrives after that turn ends |
 | Model sees no plausible next message | It answers `NONE`; nothing shows |
 
@@ -74,12 +74,13 @@ Browser client half                               Host half
 └────────────────────────────────┘                └──────────────────────────────────┘
 ```
 
-Three kinds of request:
+Four kinds of request:
 
 | Request | Meaning |
 |---|---|
 | `{sessionId}` | Normal request after a turn; the model is called only on a cache miss |
-| `{sessionId, mode:"cached"}` | Cache-only replay used when a session view remounts: instant on a hit, **never generates** |
+| `{sessionId, mode:"view"}` | Used when opening / switching back to a session: replays a cached suggestion for the current offset (zero calls); generates exactly one when the session gained new records since the browser last asked about it (usually because a turn finished while you were elsewhere); otherwise does nothing |
+| `{sessionId, mode:"cached"}` | Cache-only replay (API level; opening a session now uses `view`): instant on a hit, **never generates** |
 | `{sessionId, mode:"refresh"}` | `↻ Another one`: bypasses the cache and the interval and replaces the cached entry; the Host counts `attempt` and, from the second one, asks the model for a different angle instead of repeating the obvious answer |
 
 Both endpoints are registered as exact routes on `ctx.webServer` and pass the same-origin/owner/CSRF fence. A second endpoint, `POST /composer-prefill/prefs`, tells the General settings row whether predictions are on and which Loader entry id owns the config form; the write goes through DSH's settings document and lands in the profile's `cordis.patch.yml`, overriding the base plugin-manager configuration.
@@ -103,7 +104,7 @@ Both endpoints are registered as exact routes on `ctx.webServer` and pass the sa
 
 ## Cost and privacy
 
-- **Only the session you are looking at generates.** Sessions you never open cost nothing.
+- **Only the session you are looking at generates.** Sessions you never open cost nothing; a session that gained new records in the background (usually a finished turn) does not generate by itself — one call catches it up when you switch back.
 - Each turn adds one request of roughly 2–4k input tokens and a few dozen output tokens. It never enters the transcript, the token meter or the context window — but the provider bills it.
 - Context is the last N `user`/`assistant` **plain-text** turns only (tool results, images, attachments and reasoning are stripped). The route follows the session's own provider/model and never crosses providers.
 - Model output is untrusted: first line only, quotes stripped, length-capped, and inserted **only when you accept it**. It is never auto-sent.
@@ -119,7 +120,7 @@ The system prompt lives in [`prompt.txt`](prompt.txt) and is re-read when its mo
 - Latency is one real model call, roughly 1–3 seconds.
 - Targets the `0.2.2-rc.1` API generation; upgrades need a regression pass.
 - `client.js` is loaded directly by the Host loader and is outside `tsc --checkJs`; only the Host half (`index.js` + `lib/**`) is typechecked.
-- The browser e2e stubs the prediction response through route interception, so it does not cover real model output quality, and it depends on the plugin's English accessible names plus DSH's settings/dialog DOM; DSH upgrades need a regression pass.
+- The browser e2e stubs the prediction response through route interception, so it does not cover real model output quality, and it depends on the plugin's English accessible names plus DSH's settings/dialog/sidebar-row DOM; DSH upgrades need a regression pass.
 
 ## Roadmap
 
@@ -127,7 +128,8 @@ The system prompt lives in [`prompt.txt`](prompt.txt) and is re-read when its mo
 - 0.2.0: real model call, cache/coalescing/throttling, cached replay on session switch, restore when the draft is cleared
 - 0.3.0: `↻ another one`, a Settings → General switch
 - **0.3.1**: the switch actually persists (`volatile`); real host + browser e2e join CI and the release gate
-- 0.4.0 (optional): inline ghost text, candidate cycling on the row
+- 0.4.0: catch-up predictions when switching back to a session (`view` mode; a turn finished in the background is predicted on return)
+- 0.5.0 (optional): inline ghost text, candidate cycling on the row
 
 ## Development
 
@@ -180,7 +182,7 @@ The settings namespace depends on `Config.showPredictions` being `.volatile()` �
 Both real-host suites share [test/e2e/harness.mjs](test/e2e/harness.mjs): it locates a runnable Harness CLI (the local desktop app, or the npm-installed `@deepseek-ai/dsh` that `DSH_E2E_DSH_BIN` points at), generates a `web` profile in a throwaway `DSH_HOME` with this repository `link:`-installed, boots the real `dsh web`, and redeems the launch token for a browser cookie.
 
 - [test/e2e-host.mjs](test/e2e-host.mjs): exercises the real HTTP surface — the bundle loads in a real Host, `/composer-prefill/prefs` returns the effective config and entry id, the plugin's settings namespace exists and the switch persists in both directions to the profile patch, predicting for an unopened session makes no model call, and the 405/403/400 fences plus the 16 KiB body cap hold.
-- [test/e2e-browser.mjs](test/e2e-browser.mjs): Playwright + headless Chromium drives the real UI — the row appears from a `cached` replay, clicking fills the draft, clearing restores it locally without another request, `↻` sends `refresh` and swaps the text, `✕` suppresses it across typing/clearing, and the Settings → General switch writes through to the Host (the real `/composer-prefill/prefs` reports `enabled:false`).
+- [test/e2e-browser.mjs](test/e2e-browser.mjs): Playwright + headless Chromium drives the real UI — the row appears from a `view` replay, clicking fills the draft, clearing restores it locally without another request, `↻` sends `refresh` and swaps the text, `✕` suppresses it across typing/clearing, and the Settings → General switch writes through to the Host (the real `/composer-prefill/prefs` reports `enabled:false`).
 
 The browser suite fulfils `/composer-prefill/predict` through Playwright routing, so it verifies the **client state machine inside the real DSH shell** without spending a model call; the real endpoint is covered by the host suite. `pnpm test:e2e` needs a one-time `pnpm exec playwright install chromium`; with no runnable Harness it prints a skip message and exits 0.
 

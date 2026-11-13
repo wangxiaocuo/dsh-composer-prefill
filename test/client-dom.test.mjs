@@ -209,14 +209,44 @@ test.beforeEach(() => {
   storedEnabled = true
 })
 
-test('mounting on an idle session asks for a cached suggestion and shows it', async () => {
+test('mounting on an idle session asks the Host in view mode and shows the suggestion', async () => {
   const row = mountRow()
   predictReplies.push({ enabled: true, text: SUGGESTION_A })
   await row.render()
 
   assert.equal(calls.length, 1, 'one request on mount')
-  assert.deepEqual(calls[0].body, { sessionId: SESSION, mode: 'cached' }, 'mount uses the cached-only mode')
+  assert.deepEqual(calls[0].body, { sessionId: SESSION, mode: 'view' }, 'mount uses the replay-or-fill mode')
   assert.match(row.text(), new RegExp(SUGGESTION_A))
+  await row.teardown()
+})
+
+test('remounting after a turn ended while hidden shows the newly generated suggestion', async () => {
+  const away = mountRow()
+  predictReplies.push({ enabled: true, text: SUGGESTION_A })
+  await away.render()
+  assert.match(away.text(), new RegExp(SUGGESTION_A), 'the first mount replays the cached suggestion')
+
+  // Switching to another session unmounts the row; the Host generates for the
+  // reply that finishes here only when this session comes back into view.
+  await away.teardown()
+
+  const back = mountRow()
+  predictReplies.push({ enabled: true, text: SUGGESTION_B })
+  await back.render()
+
+  assert.equal(calls.length, 2, 'each mount asks once')
+  assert.deepEqual(calls[1].body, { sessionId: SESSION, mode: 'view' }, 'the remount asks the Host in view mode')
+  assert.match(back.text(), new RegExp(SUGGESTION_B), 'the suggestion from the hidden turn now shows')
+  await back.teardown()
+})
+
+test('a view-mode answer without text leaves the row hidden', async () => {
+  const row = mountRow()
+  predictReplies.push({ enabled: true, text: null })
+  await row.render()
+
+  assert.deepEqual(calls.at(-1).body, { sessionId: SESSION, mode: 'view' }, 'mount asks in view mode')
+  assert.equal(row.text(), '', 'no stale or empty row is rendered')
   await row.teardown()
 })
 

@@ -232,7 +232,27 @@ async function call(harnessed, options = {}) {
   console.log('ok cached replay: cold miss / warm hit / stale drop')
 }
 
-// 5. `mode: "refresh"` regenerates even with a fresh cache and inside the interval.
+// 5. `mode: "view"` generates only for a turn completed since the last ask.
+{
+  const viewed = harness()
+  mod.apply(viewed.ctx, { showPredictions: true, minIntervalMs: 0 })
+  const firstView = await call(viewed, { body: JSON.stringify({ sessionId: 's1', mode: 'view' }) })
+  assert.equal(firstView.json.value.text, null, 'a first-ever view serves nothing')
+  assert.equal(viewed.calls.prepare, 0, 'a first-ever view never calls the model')
+
+  viewed.session.seq = 43
+  const generated = await call(viewed, { body: JSON.stringify({ sessionId: 's1', mode: 'view' }) })
+  assert.equal(generated.json.value.text, '继续，把测试跑一遍', 'a view after a completed turn generates')
+  assert.equal(viewed.calls.prepare, 1, 'the view generated exactly one suggestion')
+
+  const replayed = await call(viewed, { body: JSON.stringify({ sessionId: 's1', mode: 'view' }) })
+  assert.equal(replayed.json.value.text, '继续，把测试跑一遍', 'the same offset stays on the cache')
+  assert.equal(replayed.json.value.cached, true, 'the second view is a cache hit')
+  assert.equal(viewed.calls.prepare, 1, 'the replay at the same offset costs no model call')
+  console.log('ok view: first ask free / advanced turn generates / same offset replays')
+}
+
+// 6. `mode: "refresh"` regenerates even with a fresh cache and inside the interval.
 {
   const refreshed = harness()
   mod.apply(refreshed.ctx, { showPredictions: true, minIntervalMs: 60_000 })
@@ -256,7 +276,7 @@ async function call(harnessed, options = {}) {
   console.log('ok refresh: bypasses cache + interval, replaces the cache')
 }
 
-// 6. Prefs reports the switch and the Loader entry id the settings row needs.
+// 7. Prefs reports the switch and the Loader entry id the settings row needs.
 {
   const prefs = harness()
   mod.apply(prefs.ctx, { showPredictions: false })
@@ -273,7 +293,7 @@ async function call(harnessed, options = {}) {
   console.log('ok prefs: enabled + entryId')
 }
 
-// 7. Kill switch, aborted finish, truncation and throttling.
+// 8. Kill switch, aborted finish, truncation and throttling.
 {
   const off = harness()
   mod.apply(off.ctx, { showPredictions: false })
@@ -308,7 +328,7 @@ async function call(harnessed, options = {}) {
   console.log('ok kill switch / aborted finish / truncation / throttle')
 }
 
-// 8. Policy unit: a failing generator stays a success union with no text.
+// 9. Policy unit: a failing generator stays a success union with no text.
 {
   const { ctx } = harness()
   const failed = await createPredictions(ctx, { showPredictions: true }, { generate: () => Promise.reject(new Error('boom')) }).handle(
@@ -320,7 +340,7 @@ async function call(harnessed, options = {}) {
   console.log('ok failing generator -> text null')
 }
 
-// 9. The attempt counter rises on rerolls and resets for a new turn.
+// 10. The attempt counter rises on rerolls and resets for a new turn.
 {
   const { ctx, session } = harness()
   const seen = []
@@ -348,6 +368,23 @@ async function call(harnessed, options = {}) {
     'a new turn starts again at attempt 1',
   )
   console.log('ok attempts: 1 -> 2 -> 3, reset on a new turn')
+}
+
+// 11. A throttled view is retried after the interval instead of losing the turn.
+{
+  const retried = harness()
+  mod.apply(retried.ctx, { showPredictions: true, minIntervalMs: 100 })
+  await call(retried)
+  retried.session.seq = 43
+  const throttled = await call(retried, { body: JSON.stringify({ sessionId: 's1', mode: 'view' }) })
+  assert.equal(throttled.json.value.text, null, 'a view inside the interval is dropped')
+  assert.equal(retried.calls.prepare, 1, 'the throttled view costs no model call')
+
+  await new Promise((resolve) => setTimeout(resolve, 150))
+  const generated = await call(retried, { body: JSON.stringify({ sessionId: 's1', mode: 'view' }) })
+  assert.equal(generated.json.value.text, '继续，把测试跑一遍', 'the next view retries the fill')
+  assert.equal(retried.calls.prepare, 2, 'the retry costs exactly one model call')
+  console.log('ok view retry: throttled drop / interval passes / next view fills')
 }
 
 console.log('\nhost smoke: all checks passed')

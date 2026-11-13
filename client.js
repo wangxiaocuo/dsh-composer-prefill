@@ -23,8 +23,8 @@ window.__ModuleLoader__.load({
     const CSRF_HEADER = 'x-dsh-composer-prefill'
     /** How long a "predictions are disabled" answer suppresses further calls. */
     const DISABLED_TTL_MS = 10 * 60 * 1000
-    /** Request modes: `cached` replays only, `refresh` forces a reroll. */
-    const MODE_CACHED = 'cached'
+    /** Request modes: `view` replays the Host cache or fills a session being (re)opened, `refresh` forces a reroll. */
+    const MODE_VIEW = 'view'
     const MODE_REFRESH = 'refresh'
     const MODE_GENERATE = 'generate'
 
@@ -351,7 +351,9 @@ window.__ModuleLoader__.load({
       // One trigger for every moment a suggestion may show:
       //   - a turn just ended -> generate (a Host cache hit keeps it free)
       //   - the draft became empty again, or the row mounted on an idle session
-      //     -> restore the text we already hold, else replay the Host cache only
+      //     -> restore the text we already hold, else ask the Host to replay a
+      //        cached suggestion or fill one for a turn that ended while this
+      //        session was hidden (a remount after switching back)
       // An explicit Esc/✕ suppresses re-showing until the next turn starts.
       React.useEffect(() => {
         const wasRunning = previousRunning.current
@@ -369,7 +371,7 @@ window.__ModuleLoader__.load({
         }
         if (!wasIdleEmpty) {
           if (lastSuggestionRef.current !== null) setSuggestion(lastSuggestionRef.current)
-          else request(MODE_CACHED)
+          else request(MODE_VIEW)
         }
       }, [running, idleEmpty, request])
 
