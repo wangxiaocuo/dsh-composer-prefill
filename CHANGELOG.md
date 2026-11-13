@@ -4,6 +4,20 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-13
+
+### Changed
+
+- 重写预测提示词（`prompt.txt`）：先把助手最后一条消息归类（提问 / 完成 / 受阻 / 解释），要求建议落到具体的文件、命令、测试、错误或选项上，用用户自己的语气，并给出正反例；「换一条」要求换分支而不是改写措辞。
+- 上下文只取**真人** `user`/`assistant` 消息。DSH 把 runtime-context、skill-catalog、time-context 等注入成 `role:user`，以前会挤进最近几轮并挤掉真正的对话；现在按 `source.kind` 过滤。
+- 长消息保留头尾而不是只留开头——结论、追问和下一步通常在末尾；末尾没有「已完成的助手回复」时不再请求模型（回合还在跑就不预测）。
+- 载荷新增 `task`（首个用户请求作锚点）、`language`（按文字系统检测）、`actions`（上一轮工具调用的名称、简短目标、成功/失败，不含输出）和 `previous`（换一条时已展示的建议，避免重复）。
+- 新增 `includeToolActivity` 配置（默认开启）；`maxOutputTokens` 默认从 64 提到 96，避免中文建议在 64 token 处被截断。
+
+### Tests
+
+- 提示词载荷单测覆盖注入上下文过滤、长消息头尾裁剪、语言检测、任务锚点、工具动作清洗/去重；生成器与预测层断言未完成的回合不调用模型、`previous` 只透传给同一条建议的换一条请求。
+
 ## [0.4.0] - 2026-11-13
 
 ### Added
@@ -115,7 +129,8 @@
   `defaultPrevented` checks), click-to-accept through `inputActions` with a
   `draftRev` CAS, `Esc`/`✕` dismissal.
 
-[Unreleased]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.0...v0.3.1

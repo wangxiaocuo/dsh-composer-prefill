@@ -26,7 +26,7 @@ export const Config = z.object({
     .volatile()
     .default(true)
     .description(
-      'Suggest the next message above the composer after an assistant turn. Each prediction costs one extra model call (roughly 2-4k input tokens); it never enters the transcript or the context window.',
+      'Suggest the next message above the composer after an assistant turn. Each prediction costs one extra model call (roughly 3-5k input tokens); it never enters the transcript or the context window.',
     ),
   provider: z
     .string()
@@ -42,6 +42,12 @@ export const Config = z.object({
     .max(20)
     .default(4)
     .description('How many recent user/assistant turns are sent as prediction context.'),
+  includeToolActivity: z
+    .boolean()
+    .default(true)
+    .description(
+      'Include the tool names, short targets and outcomes from the assistant\'s last turn, so the prediction can name the file or command it just worked on. No tool output is sent.',
+    ),
   maxInputChars: z
     .natural()
     .min(500)
@@ -52,7 +58,7 @@ export const Config = z.object({
     .natural()
     .min(16)
     .max(256)
-    .default(64)
+    .default(96)
     .description('Upper bound on the prediction length in tokens.'),
   timeoutMs: z
     .natural()

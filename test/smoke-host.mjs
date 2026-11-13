@@ -94,7 +94,10 @@ function harness({ admit, script } = {}) {
   const session = {
     seq: 42,
     requestHeader: () => ({ config: { provider: 'stub', model: 'stub' } }),
-    deriveMessages: () => [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    deriveMessages: () => [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    ],
   }
   const ctx = {
     sessions: { get: () => session },

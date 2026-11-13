@@ -114,7 +114,14 @@ function makeCtx({ chunks = scripted('继续，把测试跑一遍'), model = { r
  * @param {{ messages?: unknown[], route?: object | null, id?: string }} [options] live-session shape.
  * @returns {object} a stand-in live session.
  */
-function makeSession({ messages = [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }], route = { provider: 'session-provider', model: 'session-model' }, id = 's1' } = {}) {
+function makeSession({
+  messages = [
+    { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+    { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+  ],
+  route = { provider: 'session-provider', model: 'session-model' },
+  id = 's1',
+} = {}) {
   const session = {
     id,
     seq: 1,
@@ -146,7 +153,7 @@ async function captureConsole(method, fn) {
 
 /**
  * @param {object} streamOptions options handed to `call.stream`.
- * @returns {{ turns: Array<{ role: string, text: string }>, attempt: number }} decoded prompt payload.
+ * @returns {{ task?: string, language?: string, turns: Array<{ role: string, text: string }>, actions?: Array<{ name: string, target: string, status: string }>, attempt: number, previous?: string }} decoded prompt payload.
  */
 function payloadOf(streamOptions) {
   return JSON.parse(streamOptions.messages[0].content[0].text)
@@ -256,6 +263,40 @@ test('the prepared call pins the configured token cap and the prompt payload', a
     { role: 'assistant', text: 'second answer' },
   ])
   assert.equal(payloadOf(options).attempt, 1, 'the default attempt is 1')
+  assert.equal(payloadOf(options).language, 'English', 'the payload names the conversation language')
+})
+
+test('a completed turn ships the task anchor and tool activity', async () => {
+  const { ctx, calls } = makeCtx()
+  const messages = [
+    { role: 'user', content: [{ type: 'text', text: 'refactor the predictor prompt' }] },
+    { role: 'assistant', content: [{ type: 'text', text: 'first pass done' }] },
+    { role: 'user', content: [{ type: 'text', text: 'now verify it' }] },
+    {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: 'running the tests' },
+        { type: 'tool-call', id: 'c1', name: 'bash', arguments: '{"command":"pnpm test"}' },
+      ],
+    },
+    { role: 'tool', toolCallId: 'c1', isError: true, content: [{ type: 'text', text: 'one failure' }] },
+    { role: 'assistant', content: [{ type: 'text', text: 'There is one failing test.' }] },
+  ]
+  await createGenerator(ctx, { maxContextTurns: 2 })(makeSession({ messages }))
+  const payload = payloadOf(calls.streams[0])
+  assert.equal(payload.task, 'refactor the predictor prompt')
+  assert.deepEqual(payload.actions, [{ name: 'bash', target: 'pnpm test', status: 'error' }])
+})
+
+test('a turn without a completed assistant reply is never sent to the model', async () => {
+  const { ctx, calls } = makeCtx()
+  const messages = [
+    { role: 'user', content: [{ type: 'text', text: 'run the tests' }] },
+    { role: 'tool', content: [{ type: 'text', text: 'still running' }] },
+  ]
+  const text = await createGenerator(ctx, {})(makeSession({ messages }))
+  assert.equal(text, null)
+  assert.equal(calls.streams.length, 0, 'no model call for a busy turn')
 })
 
 test('the character budget trims the oldest turns', async () => {
@@ -264,11 +305,12 @@ test('the character budget trims the oldest turns', async () => {
     { role: 'user', content: [{ type: 'text', text: 'x'.repeat(600) }] },
     { role: 'assistant', content: [{ type: 'text', text: 'y'.repeat(600) }] },
     { role: 'user', content: [{ type: 'text', text: 'z'.repeat(600) }] },
+    { role: 'assistant', content: [{ type: 'text', text: 'w'.repeat(600) }] },
   ]
-  await createGenerator(ctx, { maxInputChars: 600 })(makeSession({ messages }))
+  await createGenerator(ctx, { maxInputChars: 1500 })(makeSession({ messages }))
   const turns = payloadOf(calls.streams[0]).turns
-  assert.equal(turns.length, 1, 'older turns are dropped to fit the budget')
-  assert.equal(turns[0].text, 'z'.repeat(600))
+  assert.equal(turns.length, 2, 'older turns are dropped to fit the budget')
+  assert.deepEqual(turns.map((turn) => turn.text[0]), ['z', 'w'])
 })
 
 test('missing configuration uses the documented defaults', async () => {
@@ -279,7 +321,7 @@ test('missing configuration uses the documented defaults', async () => {
   }))
   await createGenerator(ctx, undefined)(makeSession({ messages }))
 
-  assert.equal(calls.prepare[0].config.maxTokens, 64, 'default maxOutputTokens')
+  assert.equal(calls.prepare[0].config.maxTokens, 96, 'default maxOutputTokens')
   assert.equal(payloadOf(calls.streams[0]).turns.length, 6, 'default maxContextTurns keeps the small tail')
   assert.equal(payloadOf(calls.streams[0]).attempt, 1)
 })
@@ -287,8 +329,8 @@ test('missing configuration uses the documented defaults', async () => {
 test('unusable configuration values fall back to defaults', async () => {
   const { ctx, calls } = makeCtx()
   await createGenerator(ctx, { maxOutputTokens: -1, maxInputChars: -5, maxContextTurns: 'four' })(makeSession())
-  assert.equal(calls.prepare[0].config.maxTokens, 64, 'negative maxOutputTokens falls back')
-  assert.equal(payloadOf(calls.streams[0]).turns.length, 1, 'non-numeric maxContextTurns falls back')
+  assert.equal(calls.prepare[0].config.maxTokens, 96, 'negative maxOutputTokens falls back')
+  assert.equal(payloadOf(calls.streams[0]).turns.length, 2, 'non-numeric maxContextTurns falls back')
 })
 
 test('live schemastery refs are unwrapped as configuration', async () => {
@@ -317,7 +359,7 @@ test('the model selector omits reasoningEffort when the model has no reasoning e
   await createGenerator(ctx, {})(makeSession())
   assert.equal(calls.selected[0].reasoningEffort, undefined)
   assert.deepEqual(Object.keys(calls.selected[0]).sort(), ['maxTokens', 'model', 'provider', 'reasoningEffort'])
-  assert.equal(calls.prepare[0].config.maxTokens, 64)
+  assert.equal(calls.prepare[0].config.maxTokens, 96)
 })
 
 test('a max-tokens finish still yields its usable first line', async () => {
@@ -366,8 +408,9 @@ test('output hygiene trims quotes, the NONE sentinel and the length cap', async 
 
 test('the attempt from the caller reaches the prompt payload', async () => {
   const { ctx, calls } = makeCtx()
-  await createGenerator(ctx, {})(makeSession(), undefined, { attempt: 4 })
+  await createGenerator(ctx, {})(makeSession(), undefined, { attempt: 4, previous: 'already shown' })
   assert.equal(payloadOf(calls.streams[0]).attempt, 4)
+  assert.equal(payloadOf(calls.streams[0]).previous, 'already shown')
 })
 
 test('a provider failure rejects so the policy layer can degrade it', async () => {

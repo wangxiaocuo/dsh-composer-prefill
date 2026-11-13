@@ -94,24 +94,40 @@ Both endpoints are registered as exact routes on `ctx.webServer` and pass the sa
 | `showPredictions` | `true` | Master switch; off means zero model calls |
 | `provider` / `model` | `""` | Empty follows the current session; both must be set to pin |
 | `maxContextTurns` | `4` | Recent turns sent as context |
+| `includeToolActivity` | `true` | Tool names, short targets and ok/error from the last turn (never tool output) |
 | `maxInputChars` | `4000` | Character budget for that context |
-| `maxOutputTokens` | `64` | Output token budget |
+| `maxOutputTokens` | `96` | Output token budget |
 | `timeoutMs` | `8000` | Give up (and show nothing) after this |
 | `minIntervalMs` | `1500` | Minimum gap between requests |
 | `debug` | `false` | Emit `[composer-prefill]` diagnostics to the Host log |
 
-`showPredictions` is the only field that drives the visible switch, so prefer the **Settings → General** row; the other eight live in the Plugin Manager's configuration form.
+`showPredictions` is the only field that drives the visible switch, so prefer the **Settings → General** row; the other nine live in the Plugin Manager's configuration form.
 
 ## Cost and privacy
 
 - **Only the session you are looking at generates.** Sessions you never open cost nothing; a session that gained new records in the background (usually a finished turn) does not generate by itself — one call catches it up when you switch back.
-- Each turn adds one request of roughly 2–4k input tokens and a few dozen output tokens. It never enters the transcript, the token meter or the context window — but the provider bills it.
-- Context is the last N `user`/`assistant` **plain-text** turns only (tool results, images, attachments and reasoning are stripped). The route follows the session's own provider/model and never crosses providers.
+- Each turn adds one request of roughly 3–5k input tokens and a few dozen output tokens. It never enters the transcript, the token meter or the context window — but the provider bills it.
+- Context is the last N **human** `user`/`assistant` turns: Harness-injected `role:user` messages (runtime-context, skill-catalog, time-context) are filtered out; long messages keep both ends so the closing question survives, and the first user request rides along as a task anchor. Tool calls contribute only their name, a short target and ok/error — never tool output. Images, attachments and reasoning are stripped. The route follows the session's own provider/model and never crosses providers.
 - Model output is untrusted: first line only, quotes stripped, length-capped, and inserted **only when you accept it**. It is never auto-sent.
 
 ## Prompt
 
-The system prompt lives in [`prompt.txt`](prompt.txt) and is re-read when its modification time changes — edit it and the next turn uses it, **no restart**. A missing or empty file falls back to the built-in prompt. The prompt asks for one line, conversation language, ≤100 characters; the code still strips quotes, bullets and extra lines, and caps the result at 200 characters.
+The system prompt lives in [`prompt.txt`](prompt.txt) and is re-read when its modification time changes — edit it and the next turn uses it, **no restart**. A missing or empty file falls back to the built-in prompt.
+
+The JSON payload carries more than the last few turns:
+
+```json
+{
+  "task": "the user's original request (an anchor on long sessions; omitted when already in turns)",
+  "language": "Chinese / English / … (from the script of the latest user messages)",
+  "turns": [{ "role": "user", "text": "…" }, { "role": "assistant", "text": "…" }],
+  "actions": [{ "name": "bash", "target": "pnpm test", "status": "ok" }],
+  "attempt": 1,
+  "previous": "the suggestion already shown on a reroll"
+}
+```
+
+The prompt turns that into a decision procedure — classify the assistant's last move (question, finished result, failure, explanation), ground the message in a concrete file/command/error, mirror the user's voice, and take a different branch on a reroll — and adds positive and negative examples. It asks for one line, conversation language, ≤100 characters; the code still strips quotes, bullets and extra lines, and caps the result at 200 characters.
 
 ## Known limits
 
@@ -129,6 +145,7 @@ The system prompt lives in [`prompt.txt`](prompt.txt) and is re-read when its mo
 - 0.3.0: `↻ another one`, a Settings → General switch
 - **0.3.1**: the switch actually persists (`volatile`); real host + browser e2e join CI and the release gate
 - 0.4.0: catch-up predictions when switching back to a session (`view` mode; a turn finished in the background is predicted on return)
+- **0.4.1**: prediction prompt and payload v2 (injected-context filtering, head+tail clipping, task anchor, tool activity, language, reroll de-duplication)
 - 0.5.0 (optional): inline ghost text, candidate cycling on the row
 
 ## Development

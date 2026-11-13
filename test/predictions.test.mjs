@@ -369,9 +369,11 @@ test('mode "refresh" bypasses the cache, replaces it and increments the attempt'
   const map = new Map([['s1', session]])
   const texts = ['first', 'second', 'third']
   const attempts = []
+  const previousTexts = []
   const policy = createPredictions({ sessions: { get: (id) => map.get(id) } }, { showPredictions: true, minIntervalMs: 0 }, {
     generate: (_session, _signal, context) => {
       attempts.push(context.attempt)
+      previousTexts.push(context.previous)
       return Promise.resolve(texts[context.attempt - 1])
     },
   })
@@ -391,10 +393,12 @@ test('mode "refresh" bypasses the cache, replaces it and increments the attempt'
 
   await policy.handle({ sessionId: 's1', mode: MODE_REFRESH }, undefined)
   assert.deepEqual(attempts, [1, 2, 3])
+  assert.deepEqual(previousTexts, [undefined, 'first', 'second'], 'a reroll hands the shown text back')
 
   session.seq = 2
   await policy.handle({ sessionId: 's1' }, undefined)
   assert.deepEqual(attempts, [1, 2, 3, 1], 'a new turn resets the attempt counter')
+  assert.equal(previousTexts[3], undefined, 'a new turn does not inherit the old suggestion')
 })
 
 test('a superseded generation cannot overwrite the newer cache entry', async () => {
@@ -525,7 +529,10 @@ test('the default generator seam wires the real model call', async () => {
     id: 's1',
     seq: 1,
     requestHeader: () => ({ config: { provider: 'route-provider', model: 'route-model' } }),
-    deriveMessages: () => [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+    deriveMessages: () => [
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    ],
   }
   const prepared = []
   const ctx = {
