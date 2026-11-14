@@ -1,5 +1,40 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Composer prefill">
-  <rect x="6" y="13" width="52" height="38" rx="9" fill="#2f6fed" fill-opacity="0.12" stroke="#2f6fed" stroke-width="2.5"/>
-  <path d="M15 25h17" stroke="#2f6fed" stroke-width="2.5" stroke-linecap="round"/>
-  <path d="M15 36h34" stroke="#2f6fed" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="5 5" stroke-opacity="0.6"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="Composer prefill">
+  <title>Composer prefill</title>
+  <!-- A suggested message bubble dropping into the composer bar.
+       Mint stock, ink composer, coral send dot: the same treatment as the
+       Session Trash icon, drawn to read at the 36 px plugin-list tile. -->
+  <defs>
+    <linearGradient id="cp-tile" x1="8" y1="0" x2="120" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8CF8D8"/>
+      <stop offset="1" stop-color="#0FA587"/>
+    </linearGradient>
+    <radialGradient id="cp-glow" cx="34" cy="20" r="82" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cp-bar" x1="22" y1="82" x2="106" y2="112" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0D2540"/>
+      <stop offset="0.6" stop-color="#081427"/>
+      <stop offset="1" stop-color="#040A14"/>
+    </linearGradient>
+    <linearGradient id="cp-coral" x1="92" y1="91" x2="104" y2="103" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FF9566"/>
+      <stop offset="1" stop-color="#D64529"/>
+    </linearGradient>
+    <linearGradient id="cp-bubble" x1="40" y1="30" x2="92" y2="62" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#CBF7E9"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#cp-tile)"/>
+  <rect width="128" height="128" rx="28" fill="url(#cp-glow)"/>
+  <ellipse cx="64" cy="115" rx="33" ry="4.2" fill="#04302A" opacity="0.26"/>
+  <rect x="18" y="82" width="92" height="30" rx="15" fill="url(#cp-bar)"/>
+  <path d="M30 97 H46" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-opacity="0.30"/>
+  <circle cx="99" cy="97" r="5" fill="url(#cp-coral)"/>
+  <g transform="rotate(-6 64 45)">
+    <rect x="36" y="28" width="56" height="34" rx="17" fill="url(#cp-bubble)"/>
+    <path d="M46 59 L43.5 83 Q43.2 84.8 44.9 83.8 L59 61.5 Z" fill="url(#cp-bubble)"/>
+    <path d="M47 45 H83" stroke="#0B1C30" stroke-width="5" stroke-linecap="round" stroke-opacity="0.84"/>
+  </g>
 </svg>
