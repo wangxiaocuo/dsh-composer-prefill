@@ -1,124 +1,138 @@
 # Composer prefill
 
+<img align="right" width="96" alt="Plugin icon" src="https://raw.githubusercontent.com/wangxiaocuo/dsh-composer-prefill/main/assets/icon-512.png">
+
 [简体中文](README.md) · **English**
 
-Codex-style composer predictions for DeepSeek Harness: after an assistant turn ends, a suggestion for the **next message you would type** appears above the composer. `Tab` or a click fills the draft — it is **never sent automatically**.
-
-`@wangxiaocuo/dsh-composer-prefill`
-
 [![npm](https://img.shields.io/npm/v/@wangxiaocuo/dsh-composer-prefill?label=npm)](https://www.npmjs.com/package/@wangxiaocuo/dsh-composer-prefill)
-[![license](https://img.shields.io/npm/l/@wangxiaocuo/dsh-composer-prefill)](LICENSE)
 [![CI](https://github.com/wangxiaocuo/dsh-composer-prefill/actions/workflows/ci.yml/badge.svg)](https://github.com/wangxiaocuo/dsh-composer-prefill/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/@wangxiaocuo/dsh-composer-prefill)](LICENSE)
+[![dsh](https://img.shields.io/badge/dsh-0.2.2--rc.1-5b5bd6)](package.json)
+
+When an assistant turn ends, a suggestion appears above the composer with the next message you would probably type. Press `Tab` or click it to fill the draft. It never sends anything for you.
+
+![The suggestion row above the composer](https://raw.githubusercontent.com/wangxiaocuo/dsh-composer-prefill/main/assets/composer-row.png)
+
+*A real window; the suggestion text was stubbed so the capture spends no model call.*
 
 [Repository](https://github.com/wangxiaocuo/dsh-composer-prefill) · [Issues](https://github.com/wangxiaocuo/dsh-composer-prefill/issues) · [CHANGELOG](CHANGELOG.md) · [MIT](LICENSE)
 
-> The [Chinese README](README.md) is the primary version; this file is its English edition.
+> The [Chinese README](README.md) is the primary edition; this file mirrors it.
 
 ---
 
-## Behaviour
+## Install
+
+In the app, open **Settings → Plugins → Install** and paste the package name:
+
+```
+@wangxiaocuo/dsh-composer-prefill
+```
+
+To develop against a local checkout, paste the repository's absolute path instead; the install links to that checkout, and [Development](#development) covers the reload.
+
+With the CLI installed, that is the same as:
+
+```bash
+dsh plugin add @wangxiaocuo/dsh-composer-prefill
+
+# non-default profile: --profile goes before add
+dsh plugin --profile <name> add @wangxiaocuo/dsh-composer-prefill
+```
+
+After installing there are two entry points:
+
+- **Settings → General**: a "Composer predictions" switch. It applies immediately and stores the choice in the profile.
+- **Settings → Plugins → Composer predictions → Configuration**: the other nine fields.
+
+Runtime: DeepSeek Harness `0.2.2-rc.1` (see `engines.dsh`). The plugin runs on the Node that DSH itself ships; local development and tests need Node 22.13+ (why, in [Development](#development)).
+
+## Usage
 
 | Moment | What happens |
 |---|---|
-| Assistant turn ended, composer empty | One suggestion appears (single line, conversation language, prompt asks for ≤100 characters) |
-| `Tab` / click the text | Fills the draft; nothing is sent |
-| `↻` | Another one: force a fresh generation (skips the cache and the interval, one model call) with an "Asking for another…" progress state; an empty result keeps the current text |
-| `Esc` / `✕` | Hidden for this turn (typing and clearing will not bring it back until the next turn) |
-| Start typing | Hides immediately and aborts the in-flight request (saves tokens) |
-| Delete what you typed | The suggestion returns **instantly** from local state, no request |
-| Switch away and back | A cached suggestion for the current turn returns instantly — **zero model calls**; when the session gained new records since the last ask (usually a turn finished in the background), one is generated (about one model call); with neither, nothing shows and nothing is generated |
-| Submit | The next turn's suggestion arrives after that turn ends |
-| Model sees no plausible next message | It answers `NONE`; nothing shows |
+| Assistant turn ended, composer empty | One suggestion appears: single line, conversation language, the prompt asks for ≤100 characters |
+| `Tab` or click the text | Fills the draft, sends nothing, and stays editable |
+| `↻` | Another one: skips the cache and the interval and forces a fresh generation, one model call. Shows "Asking for another…" while it runs; an empty result keeps the current text |
+| `Esc` or `✕` | Hidden for this turn. Typing and clearing will not bring it back |
+| Start typing | Hides at once and aborts the in-flight request, so the call is not spent |
+| Delete what you typed | The suggestion returns instantly from local state, with no request |
+| Switch away and back | A cached suggestion for the current turn returns instantly (zero model calls). If the session gained records meanwhile (usually a turn that finished in the background), one is generated. With neither, nothing shows and nothing is generated |
+| Submit | The next suggestion arrives after that turn ends |
+| The model sees no plausible next message | It answers `NONE`; nothing shows |
 
-The UI is one muted row above the composer, with a `↵` lead on the left and a `Tab` keycap, `↻` reroll and `✕` dismiss on the right:
+The UI is one muted row above the composer: `↵` on the left, a `Tab` keycap, reroll and dismiss on the right. It is the order-15 row in `conversation.input.dock` and takes no space inside the composer.
 
-```
-↵ Shall we wire the e2e suite into CI?          Tab   ↻   ✕
-```
+## Configuration
 
-It is the order-15 row in `conversation.input.dock` and does not take space inside the composer.
+The master switch lives on the **Settings → General** row. The rest live in the Plugin Manager's configuration form.
 
-## Install
+| Field | Default | Meaning |
+|---|---|---|
+| `showPredictions` | `true` | Master switch. Off means zero model calls |
+| `provider` | `""` | Provider route for predictions; empty follows the current session |
+| `model` | `""` | Model id for predictions. `provider` and `model` must both be set to take effect |
+| `maxContextTurns` | `4` | Recent turns sent as context (1-20) |
+| `includeToolActivity` | `true` | Tool names, short targets and ok/error from the last turn, never tool output |
+| `maxInputChars` | `4000` | Character budget for the context |
+| `maxOutputTokens` | `96` | Output token budget |
+| `timeoutMs` | `8000` | Give up after this long, which means showing nothing |
+| `minIntervalMs` | `1500` | Minimum gap between requests |
+| `debug` | `false` | Emit `[composer-prefill]` diagnostics to the Host log |
 
-Published on npm: <https://www.npmjs.com/package/@wangxiaocuo/dsh-composer-prefill>
+## Cost and privacy
 
-**From npm (recommended)**
-
-```
-Settings → Plugins → Install  →  @wangxiaocuo/dsh-composer-prefill
-```
-
-**Local checkout (from source)**
-
-```
-Settings → Plugins → Install  →  absolute path to this repository
-```
-
-After installing:
-
-- **Settings → General** carries a "Composer predictions" switch that applies immediately and persists the choice in the profile;
-- **Settings → Plugins → Composer predictions → Configuration** holds the other eight tunables (the master switch is the General row).
-
-Runtime: DeepSeek Harness `0.2.2-rc.1` (see `engines.dsh`). The plugin runs on the Node that DSH itself ships; local development and tests require Node 22.13+ (see [Engineering baseline](#engineering-baseline)).
+- Only the session you are looking at generates. A session you never open costs nothing, and a session that finished a turn in the background does not generate on its own; one call catches it up when you switch back.
+- Each turn adds one request of roughly 3-5k input tokens and a few dozen output tokens. It never enters the transcript, the token meter or the context window, but the provider bills it.
+- Context is the last N **human** `user` / `assistant` turns. Harness-injected messages (runtime-context, skill-catalog, time-context) also carry `role:user` and are filtered out here. Long messages keep both ends because the closing question usually sits at the end, and the first user request rides along as a task anchor.
+- Tool calls contribute their name, a short target and ok/error, never their output. Images, attachments and reasoning are stripped.
+- The provider and model follow the session and never cross providers.
+- Model output is treated as untrusted: first line only, quotes stripped, length-capped, inserted only when you accept it, never auto-sent.
 
 ## How it works
 
 ```
-Browser client half                               Host half
-┌────────────────────────────────┐                ┌──────────────────────────────────┐
-│ conversation.input.dock row    │ ────────────▶  │ /composer-prefill/predict        │
-│ useInput / useSessionStatus    │                │ Host/Origin fence + owner check  │
-│ AbortController (typing)       │ ◀───────────   │ LRU cache by (session, seq)      │
-│ inputActions.insertText(span)  │                │ deriveMessages() last N turns    │
-                                                  │ one small ctx.llm call           │
-└────────────────────────────────┘                └──────────────────────────────────┘
+Browser client half                              Host half
+┌────────────────────────────────┐               ┌──────────────────────────────────┐
+│ conversation.input.dock row    │ ────────────▶ │ /composer-prefill/predict        │
+│ useInput / useSessionStatus    │               │ Host/Origin fence + owner check  │
+│ AbortController (typing)       │ ◀───────────  │ LRU cache by (session, seq)      │
+│ inputActions.insertText(span)  │               │ deriveMessages() last N turns    │
+│                                │               │ one small ctx.llm call           │
+└────────────────────────────────┘               └──────────────────────────────────┘
 ```
 
-Four kinds of request:
+The browser half docks a row into `conversation.input.dock` and uses `useInput` and `useSessionStatus` to decide when to ask. The first keystroke aborts the in-flight request through an `AbortController`. The Host half registers two exact routes on `ctx.webServer`, runs them through the same-origin, owner and CSRF checks, keeps a 32-entry cache keyed by `(session, seq)`, and makes one small `ctx.llm` call over the last N turns.
 
-| Request | Meaning |
-|---|---|
-| `{sessionId}` | Normal request after a turn; the model is called only on a cache miss |
-| `{sessionId, mode:"view"}` | Used when opening / switching back to a session: replays a cached suggestion for the current offset (zero calls); generates exactly one when the session gained new records since the browser last asked about it (usually because a turn finished while you were elsewhere); otherwise does nothing |
-| `{sessionId, mode:"cached"}` | Cache-only replay (API level; opening a session now uses `view`): instant on a hit, **never generates** |
-| `{sessionId, mode:"refresh"}` | `↻ Another one`: bypasses the cache and the interval and replaces the cached entry; the Host counts `attempt` and, from the second one, asks the model for a different angle instead of repeating the obvious answer |
+Callers outside the browser half have two endpoints.
 
-Both endpoints are registered as exact routes on `ctx.webServer` and pass the same-origin/owner/CSRF fence. A second endpoint, `POST /composer-prefill/prefs`, tells the General settings row whether predictions are on and which Loader entry id owns the config form; the write goes through DSH's settings document and lands in the profile's `cordis.patch.yml`, overriding the base plugin-manager configuration.
-
-`Tab` is a guarded enhancement: a bubble-phase listener that claims the key only when the row is visible, focus is inside `[data-composer-card]`, there is no IME/modifier, and no slash/`@` menu consumed it (`defaultPrevented`). Clicking is the supported path.
-
-## Configuration
-
-| Field | Default | Meaning |
+| Endpoint | Request | Response |
 |---|---|---|
-| `showPredictions` | `true` | Master switch; off means zero model calls |
-| `provider` / `model` | `""` | Empty follows the current session; both must be set to pin |
-| `maxContextTurns` | `4` | Recent turns sent as context |
-| `includeToolActivity` | `true` | Tool names, short targets and ok/error from the last turn (never tool output) |
-| `maxInputChars` | `4000` | Character budget for that context |
-| `maxOutputTokens` | `96` | Output token budget |
-| `timeoutMs` | `8000` | Give up (and show nothing) after this |
-| `minIntervalMs` | `1500` | Minimum gap between requests |
-| `debug` | `false` | Emit `[composer-prefill]` diagnostics to the Host log |
+| `POST /composer-prefill/predict` | `{ sessionId, mode? }`, `mode` being `view`, `refresh` or `cached` | `{ ok: true, value: { enabled, text, cached? } }` |
+| `POST /composer-prefill/prefs` | `{}` | `{ ok: true, value: { enabled, entryId } }` |
 
-`showPredictions` is the only field that drives the visible switch, so prefer the **Settings → General** row; the other nine live in the Plugin Manager's configuration form.
+Both routes require the same-origin cookie, the owner principal and the `x-dsh-composer-prefill: 1` header, cap the body at 16 KiB and answer 405 to anything but POST. The `prefs` route tells the Settings → General row whether predictions are on and which Loader entry id owns the config form; the write goes through DSH's settings document into the profile's `cordis.patch.yml`, overriding the base plugin-manager configuration.
 
-## Cost and privacy
+The four request shapes:
 
-- **Only the session you are looking at generates.** Sessions you never open cost nothing; a session that gained new records in the background (usually a finished turn) does not generate by itself — one call catches it up when you switch back.
-- Each turn adds one request of roughly 3–5k input tokens and a few dozen output tokens. It never enters the transcript, the token meter or the context window — but the provider bills it.
-- Context is the last N **human** `user`/`assistant` turns: Harness-injected `role:user` messages (runtime-context, skill-catalog, time-context) are filtered out; long messages keep both ends so the closing question survives, and the first user request rides along as a task anchor. Tool calls contribute only their name, a short target and ok/error — never tool output. Images, attachments and reasoning are stripped. The route follows the session's own provider/model and never crosses providers.
-- Model output is untrusted: first line only, quotes stripped, length-capped, and inserted **only when you accept it**. It is never auto-sent.
+| mode | Use |
+|---|---|
+| absent | The normal request after a turn; the model is called only on a cache miss |
+| `view` | Opening or switching back to a session: replays a cached suggestion for the current offset; generates exactly one when the session gained records since the last ask (usually a turn finished in the background); otherwise does nothing |
+| `refresh` | `↻`: bypasses the cache and the interval and replaces the cached entry. The Host counts `attempt` and, from the second one, asks the model for a different angle instead of repeating the obvious answer |
+| `cached` | Cache-only replay that never generates. Kept for API callers; the browser now uses `view` |
+
+`Tab` is a guarded enhancement: a bubble-phase listener that claims the key only when the row is visible, focus is inside `[data-composer-card]`, there is no input method or modifier, and no slash or `@` menu consumed it (`defaultPrevented`). Clicking is the supported path.
 
 ## Prompt
 
-The system prompt lives in [`prompt.txt`](prompt.txt) and is re-read when its modification time changes — edit it and the next turn uses it, **no restart**. A missing or empty file falls back to the built-in prompt.
+The system prompt lives in [`prompt.txt`](prompt.txt) and is re-read by modification time on every call. An edit applies to the next turn with no restart; a missing or empty file falls back to the built-in prompt.
 
-The JSON payload carries more than the last few turns:
+Besides the last few turns, the payload carries:
 
 ```json
 {
-  "task": "the user's original request (an anchor on long sessions; omitted when already in turns)",
+  "task": "the user's original request (an anchor on long sessions, omitted when already in turns)",
   "language": "Chinese / English / … (from the script of the latest user messages)",
   "turns": [{ "role": "user", "text": "…" }, { "role": "assistant", "text": "…" }],
   "actions": [{ "name": "bash", "target": "pnpm test", "status": "ok" }],
@@ -127,44 +141,45 @@ The JSON payload carries more than the last few turns:
 }
 ```
 
-The prompt turns that into a decision procedure — classify the assistant's last move (question, finished result, failure, explanation), ground the message in a concrete file/command/error, mirror the user's voice, and take a different branch on a reroll — and adds positive and negative examples. It asks for one line, conversation language, ≤100 characters; the code still strips quotes, bullets and extra lines, and caps the result at 200 characters.
+The prompt turns those fields into a decision procedure. Classify the assistant's last move first (a question, a delivered result, a blockage, an explanation), then ground the message in a concrete file, command, error or option and mirror the user's voice. A reroll must take a different branch rather than reword the previous line. Positive and negative examples sit in the file. Output is one line, in the conversation language, at most 100 characters; the code also strips quotes and bullets, keeps the first line and caps the result at 200 characters.
 
 ## Known limits
 
-- The suggestion sits **above** the composer, not as inline ghost text at the caret (that would require measuring and cloning the Lexical editor DOM, which breaks under themes and zoom).
-- `Tab` relies on the internal `[data-composer-card]` DOM contract; DSH upgrades need a regression pass.
-- Latency is one real model call, roughly 1–3 seconds.
-- Targets the `0.2.2-rc.1` API generation; upgrades need a regression pass.
-- `client.js` is loaded directly by the Host loader and is outside `tsc --checkJs`; only the Host half (`index.js` + `lib/**`) is typechecked.
-- The browser e2e stubs the prediction response through route interception, so it does not cover real model output quality, and it depends on the plugin's English accessible names plus DSH's settings/dialog/sidebar-row DOM; DSH upgrades need a regression pass.
+- The suggestion sits above the composer; there is no inline ghost text at the caret. That would mean measuring and cloning the Lexical editor DOM, which breaks under a theme or zoom change.
+- `Tab` relies on the internal `[data-composer-card]` DOM contract.
+- Latency is one real model call, about 1-3 seconds from request to row.
+- Only the `0.2.2-rc.1` API generation is targeted. A DSH upgrade needs a regression pass, including `[data-composer-card]` and the English aria-labels the plugin uses.
+- `client.js` is loaded by the Host loader and is outside `tsc --checkJs`; only the Host half (`index.js` and `lib/**`) is typechecked.
+- The browser e2e stubs the prediction response through route interception, so it proves the client state machine inside the real shell and does not cover model output quality.
 
 ## Roadmap
 
-- 0.1.x: skeleton + suggestion row (M0/M1)
-- 0.2.0: real model call, cache/coalescing/throttling, cached replay on session switch, restore when the draft is cleared
-- 0.3.0: `↻ another one`, a Settings → General switch
-- **0.3.1**: the switch actually persists (`volatile`); real host + browser e2e join CI and the release gate
-- 0.4.0: catch-up predictions when switching back to a session (`view` mode; a turn finished in the background is predicted on return)
-- 0.4.1: prediction prompt and payload v2 (injected-context filtering, head+tail clipping, task anchor, tool activity, language, reroll de-duplication)
-- **0.4.2**: new plugin icon (mint / ink / coral, the same treatment as `dsh-session-trash`)
+- 0.1.x: skeleton and the suggestion row (M0/M1)
+- 0.2.0: real model call, cache/coalescing/throttling, cached replay on switch, restore when the draft is cleared
+- 0.3.0: `↻ another one`, the Settings → General switch
+- 0.3.1: the switch persists (`volatile`); real-host and browser e2e join CI and the release gate
+- 0.4.0: catch-up predictions on switching back to a session (`view` mode)
+- 0.4.1: prompt and payload v2 (injected-context filtering, head and tail clipping, task anchor, tool actions, language, reroll de-duplication)
+- 0.4.2: new plugin icon
 - 0.5.0 (optional): inline ghost text, candidate cycling on the row
 
 ## Development
 
+### Layout
+
 ```
-index.js            Host: Config + route registration
-lib/http.js         Same-origin endpoint, fence/owner/CSRF checks, body reading
-lib/predictions.js  Cache, request coalescing, throttling, RPC handler
-lib/generate.js     One ctx.llm call (route, context, output hygiene)
-lib/prompt.js       Context trimming, output sanitising, hot-reloaded prompt
-lib/config.js       Config readers (schemastery refs or plain values)
-client.js           Browser half: the row, trigger state machine, Tab/Esc, accept
-prompt.txt          System prompt
-test/               Unit tests, Host smoke, browser-half DOM, real-host e2e
+index.js             Host: Config + route registration
+lib/http.js          Same-origin endpoints, fence/owner/CSRF checks, body reading
+lib/predictions.js   Cache, request coalescing, throttling, RPC handler
+lib/generate.js      One ctx.llm call (route, context, output hygiene)
+lib/prompt.js        Context trimming, output sanitising, hot-reloaded prompt
+lib/config.js        Config readers (schemastery refs or plain values)
+client.js            Browser half: the row, trigger state machine, Tab/Esc, accept
+prompt.txt           System prompt
+test/                Unit tests, Host smoke, browser-half DOM, real-host e2e
 ```
 
-- `client.js` changes: reload the page.
-- `index.js` / `lib/*.js` changes: **quit and reopen the app**. This desktop build ships no Host-side module replacement, and Node caches ES modules for the process lifetime.
+A `client.js` change needs a page reload. An `index.js` or `lib/*.js` change needs a **quit and reopen**: this desktop build ships no Host-side module replacement, and Node caches ES modules for the process lifetime.
 
 ```bash
 pnpm install
@@ -172,47 +187,51 @@ pnpm typecheck        # tsc --checkJs (index.js + lib/**)
 pnpm test             # unit tests (node:test, Host lib + browser-half DOM)
 pnpm test:coverage    # coverage floor on lib/** (same flags as CI)
 pnpm test:smoke       # endpoint end-to-end (real Cordis wiring, scripted model)
-pnpm test:e2e         # real dsh web + headless Chromium end-to-end (below)
+pnpm test:e2e         # real dsh web + headless Chromium
 pnpm pack:check       # verify the npm tarball file list
 pnpm verify           # typecheck + test + smoke + pack:check; also runs on prepublishOnly
 ```
 
-## Engineering baseline
+### Tests
 
-CI runs on GitHub Actions ([ci.yml](.github/workflows/ci.yml)) and releases are tag-triggered ([release.yml](.github/workflows/release.yml)).
+Both real-host suites share [test/e2e/harness.mjs](test/e2e/harness.mjs): it locates a runnable Harness CLI (the local desktop app, or the npm-installed `@deepseek-ai/dsh` that `DSH_E2E_DSH_BIN` points at), generates a `web` profile in a throwaway `DSH_HOME` with this repository `link:`-installed, boots the real `dsh web`, and redeems the launch token for a browser cookie.
+
+- [test/e2e-host.mjs](test/e2e-host.mjs) exercises the real HTTP surface: the plugin loads in a real Host, `prefs` returns the config and entry id, the settings document holds the plugin's namespace and the switch persists both ways, predicting for an unopened session makes no model call, and the 405/403/400 fences plus the 16 KiB cap hold.
+- [test/e2e-browser.mjs](test/e2e-browser.mjs) drives the real UI with Playwright and headless Chromium: the row appears from a `view` replay, a click fills the draft, clearing restores it locally, `↻` sends `refresh`, `✕` suppresses the row across typing and clearing, and the Settings → General switch writes through to the Host.
+
+The browser suite fulfils `/composer-prefill/predict` through Playwright routing, so it verifies the client state machine inside the real shell without spending a model call; the real endpoint is covered by the host suite. The first run needs `pnpm exec playwright install chromium`. With no runnable Harness it prints a skip message and exits 0.
+
+`client.js` is a DSH module-loader script (`window.__ModuleLoader__.load` plus `factory(require)`) and cannot be imported as ESM, so it is not typechecked; `test/client-dom.test.mjs` covers its behaviour under jsdom.
+
+### CI and releases
+
+CI runs on GitHub Actions ([ci.yml](.github/workflows/ci.yml)); releases are tag-triggered ([release.yml](.github/workflows/release.yml)).
 
 | Check | Environment |
 |---|---|
 | `tsc --checkJs` (`index.js` + `lib/**`) | Ubuntu Node 22 / 24 |
-| Unit tests + Host smoke test | Ubuntu Node 22 / 24, Windows Node 22 |
+| Unit tests and the Host smoke test | Ubuntu Node 22 / 24, Windows Node 22 |
 | Coverage floor (`lib/**`) | Ubuntu Node 22 |
 | Package contents (`npm pack` file list) | Ubuntu Node 22 |
-| Real Host + browser e2e (throwaway `DSH_HOME`, pinned `dsh` runtime) | Ubuntu Node 24 |
+| Real Host and browser e2e (throwaway `DSH_HOME`, pinned `dsh` runtime) | Ubuntu Node 24 |
 
-`npm run test:coverage` requires lines 95 / branches 90 / functions 95 on `lib/**`; `test/run-unit.mjs` enumerates `*.test.mjs` itself instead of relying on shell glob expansion, so Windows runs the same set of cases.
+The floor on `lib/**` is 95% lines, 90% branches and 95% functions. `test/run-unit.mjs` enumerates `*.test.mjs` itself instead of relying on shell glob expansion, so Windows runs the same cases.
 
-The supported baseline is **Node 22.13+**: Node 20 reached end of life in April 2026, the pinned pnpm 11 cannot run on Node < 22.13 (`node:sqlite`), and the DSH runtime this plugin loads into ships Node 24. `engines.node` is therefore `>=22.13`.
+The supported baseline is Node 22.13+: Node 20 reached end of life in April 2026, the pinned pnpm 11 cannot run below 22.13 (`node:sqlite`), and the DSH runtime this plugin loads into ships Node 24.
 
-The settings namespace depends on `Config.showPredictions` being `.volatile()` — remove that marker and the settings switch silently stops persisting (the host e2e asserts this).
+A release takes three steps. Bump the version in `package.json` and fold the `[Unreleased]` entries into a new `## [x.y.z] - YYYY-MM-DD` section in the CHANGELOG. Commit, push, then tag:
 
-## End-to-end tests
+```bash
+git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z
+```
 
-Both real-host suites share [test/e2e/harness.mjs](test/e2e/harness.mjs): it locates a runnable Harness CLI (the local desktop app, or the npm-installed `@deepseek-ai/dsh` that `DSH_E2E_DSH_BIN` points at), generates a `web` profile in a throwaway `DSH_HOME` with this repository `link:`-installed, boots the real `dsh web`, and redeems the launch token for a browser cookie.
+The tag runs [release.yml](.github/workflows/release.yml): `pnpm release:check` (tag, `package.json` and the newest CHANGELOG version agree), then typecheck, unit tests, smoke, the pack check and both real-host e2e suites, then `npm publish --provenance` and a GitHub Release.
 
-- [test/e2e-host.mjs](test/e2e-host.mjs): exercises the real HTTP surface — the bundle loads in a real Host, `/composer-prefill/prefs` returns the effective config and entry id, the plugin's settings namespace exists and the switch persists in both directions to the profile patch, predicting for an unopened session makes no model call, and the 405/403/400 fences plus the 16 KiB body cap hold.
-- [test/e2e-browser.mjs](test/e2e-browser.mjs): Playwright + headless Chromium drives the real UI — the row appears from a `view` replay, clicking fills the draft, clearing restores it locally without another request, `↻` sends `refresh` and swaps the text, `✕` suppresses it across typing/clearing, and the Settings → General switch writes through to the Host (the real `/composer-prefill/prefs` reports `enabled:false`).
+Publishing uses npm Trusted Publishing (OIDC), so no `NPM_TOKEN` is needed: on npmjs.com add repository `wangxiaocuo/dsh-composer-prefill` and workflow `release.yml` under the package's **Settings → Publishing access → Trusted publishers**. To use an automation token instead, uncomment the `NODE_AUTH_TOKEN` environment variable in release.yml and add the matching secret.
 
-The browser suite fulfils `/composer-prefill/predict` through Playwright routing, so it verifies the **client state machine inside the real DSH shell** without spending a model call; the real endpoint is covered by the host suite. `pnpm test:e2e` needs a one-time `pnpm exec playwright install chromium`; with no runnable Harness it prints a skip message and exits 0.
+One maintainer trap: the `.volatile()` marker on `Config.showPredictions` must stay. Remove it and the settings switch silently stops persisting; the host e2e asserts this.
 
-`client.js` is a DSH module-loader script (`window.__ModuleLoader__.load` + `factory(require)`) and cannot be imported as ESM, so it is **not typechecked**; its behaviour is covered by `test/client-dom.test.mjs` under jsdom.
-
-## Releasing (maintainers)
-
-1. Bump the version in `package.json` and fold the `[Unreleased]` entries into a new `## [x.y.z] - YYYY-MM-DD` section in `CHANGELOG.md`, with its version link.
-2. Commit, push, then tag: `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
-3. The tag runs [release.yml](.github/workflows/release.yml): `pnpm release:check` (tag = `package.json` = newest CHANGELOG version), then typecheck, unit tests, smoke, pack check and both real-host e2e suites, then `npm publish --provenance` and a GitHub Release.
-
-Publishing uses npm Trusted Publishing (OIDC), so no `NPM_TOKEN` is required: add repository `wangxiaocuo/dsh-composer-prefill` and workflow `release.yml` under the package's **Settings → Publishing access → Trusted publishers** on npmjs.com. To use an automation token instead, uncomment the `NODE_AUTH_TOKEN` environment variable in release.yml and add the matching secret.
+Bugs and pull requests go to [GitHub Issues](https://github.com/wangxiaocuo/dsh-composer-prefill/issues).
 
 ## License
 
