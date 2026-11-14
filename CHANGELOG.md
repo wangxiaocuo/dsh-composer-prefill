@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-11-14
+
+### Changed
+
+- 重写 README（中英同步）：按标准 README 结构重排，补真实界面截图、`dsh plugin add` 安装命令，以及 `/predict` 和 `/prefs` 的 HTTP 端点表；英文版修掉「其余 8 项配置」等与代码不一致的说法。
+
+### Tests
+
+- 浏览器 e2e 处理启动后延迟挂载的未登录弹窗：静默窗口从 250ms 提到 1 秒，建议条出现后再清一次弹窗并断言界面无模态框，避免首击被遮罩拦截导致 CI 失败。
+
 ## [0.4.2] - 2026-11-14
 
 ### Changed
@@ -135,7 +145,8 @@
   `defaultPrevented` checks), click-to-accept through `inputActions` with a
   `draftRev` CAS, `Esc`/`✕` dismissal.
 
-[Unreleased]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.2...v0.4.0
