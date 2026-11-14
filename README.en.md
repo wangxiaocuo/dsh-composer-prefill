@@ -145,7 +145,8 @@ The prompt turns that into a decision procedure — classify the assistant's las
 - 0.3.0: `↻ another one`, a Settings → General switch
 - **0.3.1**: the switch actually persists (`volatile`); real host + browser e2e join CI and the release gate
 - 0.4.0: catch-up predictions when switching back to a session (`view` mode; a turn finished in the background is predicted on return)
-- **0.4.1**: prediction prompt and payload v2 (injected-context filtering, head+tail clipping, task anchor, tool activity, language, reroll de-duplication)
+- 0.4.1: prediction prompt and payload v2 (injected-context filtering, head+tail clipping, task anchor, tool activity, language, reroll de-duplication)
+- **0.4.2**: new plugin icon (mint / ink / coral, the same treatment as `dsh-session-trash`)
 - 0.5.0 (optional): inline ghost text, candidate cycling on the row
 
 ## Development

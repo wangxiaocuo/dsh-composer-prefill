@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-14
+
 ### Changed
 
 - 重新设计插件图标（`icon.svg`）：换成和 `dsh-session-trash` 同一套画法——薄荷渐变圆角底、墨蓝输入条、珊瑚发送点，一条待填入的建议气泡落进输入条；128 画布，按 36px 插件列表尺寸收形，替代原来的蓝色描边输入框。`assets/icon-512.png` 同步按新图标重出。
@@ -133,7 +135,8 @@
   `defaultPrevented` checks), click-to-accept through `inputActions` with a
   `draftRev` CAS, `Esc`/`✕` dismissal.
 
-[Unreleased]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.3.1...v0.3.2
