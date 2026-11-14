@@ -131,22 +131,32 @@ function pass(name) {
 
 /**
  * Close every app-level startup dialog: the first-boot "Preview Notice"
- * (needs its `Continue`) and the sign-in "Get started" prompt (has `Close` /
- * `Escape`). Tolerates a build that shows none.
+ * (needs its `Continue`) and the signed-out "Get started" prompt (has `Close`).
+ * Tolerates a build that shows none.
+ *
+ * The account prompt mounts a beat after the notice is dismissed instead of at
+ * the same time, and a 250ms quiet check was short enough to miss it on a slow
+ * runner: the row then stayed visible but every click was intercepted. Require
+ * a full second of quiet before reporting the screen clear.
  *
  * @param {import('playwright').Page} target page under test.
+ * @param {{ appearanceTimeout?: number }} [options] how long to wait for a first
+ *   dialog; `0` only clears one that is already open.
  * @returns {Promise<void>} resolves once no dialog is open.
  */
-async function settleStartupDialogs(target) {
+async function settleStartupDialogs(target, options = {}) {
   const dialog = target.locator('[role="dialog"]')
+  const appearanceTimeout = options.appearanceTimeout ?? 6_000
   // The notice renders just after the shell, so give it a bounded window. The
   // 6s cap keeps a future build without startup dialogs from stalling the suite.
-  await dialog.first().waitFor({ state: 'visible', timeout: 6_000 }).catch(() => {})
-  const deadline = Date.now() + 8_000
+  if (appearanceTimeout > 0) {
+    await dialog.first().waitFor({ state: 'visible', timeout: appearanceTimeout }).catch(() => {})
+  }
+  const deadline = Date.now() + 12_000
   while (Date.now() < deadline) {
     if ((await dialog.count()) === 0) {
-      // One quiet check: a second dialog (Get started) follows the first.
-      await sleep(250)
+      // A second dialog (Get started) follows the first, sometimes a beat later.
+      await sleep(1_000)
       if ((await dialog.count()) === 0) return
       continue
     }
@@ -282,6 +292,14 @@ try {
 
     const row = page.locator('[data-composer-prefill]')
     await row.first().waitFor({ state: 'visible', timeout: 10_000 })
+    // The account prompt can mount after the row; one cheap pass keeps it from
+    // covering the first click. No wait for a dialog that may never come.
+    await settleStartupDialogs(page, { appearanceTimeout: 0 })
+    assert.equal(
+      await page.locator('[role="dialog"]').count(),
+      0,
+      'no startup dialog may cover the composer before the first click',
+    )
 
     // 1. The row appears on mount, fed by exactly one mode:view request.
     await sleep(300) // let any late duplicate mount request surface before counting
