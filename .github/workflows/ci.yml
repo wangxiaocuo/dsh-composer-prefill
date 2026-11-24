@@ -117,7 +117,9 @@ jobs:
       - name: install a pinned DSH runtime
         shell: bash
         env:
-          DSH_VERSION: 0.2.2-rc.1
+          # The newest DSH release this plugin is regression-tested against.
+          # The supported window lives in `engines.dsh`; bump both together.
+          DSH_VERSION: 0.2.2-rc.5
         run: |
           CLI_DIR="$RUNNER_TEMP/dsh-cli"
           mkdir -p "$CLI_DIR"

@@ -4,6 +4,19 @@
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-24
+
+### Changed
+
+- 明确标注支持的 DSH 版本范围：`package.json` 的 `engines.dsh` 从 `^0.2.2-rc.1` 改成 `>=0.2.2-rc.1 <0.2.3-0`。上限用 `<0.2.3-0` 而不是 `<0.2.3`，因为 DSH 校验这个范围时开着 `includePrerelease`，写 `<0.2.3` 会把 0.2.3 的预发布版一起放进来。中英 README 新增「兼容性」一节，写清范围含义、声明位置、已回归版本和不在范围内的版本。
+- 跟随最新 DSH 发布：CI 与发版流水线里 pinned 的 `DSH_VERSION` 从 `0.2.2-rc.1` 提到 `0.2.2-rc.5`（npm `latest`），并在两处 workflow 注明这个 pin 和 `engines.dsh` 要一起改。
+- 中英 README 的版本徽章、运行要求、已知限制和路线图同步到新范围。
+
+### Tests
+
+- 在 `0.2.2-rc.1`、`0.2.2-rc.3`（桌面版自带）、`0.2.2-rc.5` 三个真实运行时上跑了完整回归：宿主 e2e 14 项、浏览器 e2e 9 项全部通过，说明 0.2.2 这一代的 Host 服务（`llm`、`agentDefaultModel`、`sessions`、`webServer`、`connection.admit`）和客户端 slot 契约（`conversation.input.dock`、`settings.general.item`、`inputActions`、`configForms`）没有变化，插件代码无需改动。
+- 记录了 0.2.3-alpha.2 的实测结论：`connection.admit` 现在走 `connection.authentication` 子服务，未注入时调用会抛 `cannot get property "connection.authentication" without inject`，插件端点因此全部 403——这就是范围上限卡在 0.2.3 之前的原因，也是将来适配 0.2.3 时的第一处改动点。
+
 ## [0.4.3] - 2026-11-14
 
 ### Changed
@@ -145,7 +158,8 @@
   `defaultPrevented` checks), click-to-accept through `inputActions` with a
   `draftRev` CAS, `Esc`/`✕` dismissal.
 
-[Unreleased]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/wangxiaocuo/dsh-composer-prefill/compare/v0.4.0...v0.4.1

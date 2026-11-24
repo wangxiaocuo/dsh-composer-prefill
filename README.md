@@ -7,7 +7,7 @@
 [![npm](https://img.shields.io/npm/v/@wangxiaocuo/dsh-composer-prefill?label=npm)](https://www.npmjs.com/package/@wangxiaocuo/dsh-composer-prefill)
 [![CI](https://github.com/wangxiaocuo/dsh-composer-prefill/actions/workflows/ci.yml/badge.svg)](https://github.com/wangxiaocuo/dsh-composer-prefill/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/@wangxiaocuo/dsh-composer-prefill)](LICENSE)
-[![dsh](https://img.shields.io/badge/dsh-0.2.2--rc.1-5b5bd6)](package.json)
+[![dsh](https://img.shields.io/badge/dsh-%3E%3D0.2.2--rc.1%20%3C0.2.3--0-5b5bd6)](package.json)
 
 助手回完一轮，输入框上方出现一条建议，内容是你大概率会打的下一句。按 `Tab` 或点一下填进草稿，不会自动发送。
 
@@ -43,7 +43,20 @@ dsh plugin --profile <name> add @wangxiaocuo/dsh-composer-prefill
 - **设置 → 通用**：一行「输入预测」开关，点了即时生效，选择写进 profile；
 - **设置 → 插件 → 输入预测 → 配置**：其余 9 个参数。
 
-运行要求 DSH `0.2.2-rc.1`（见 `engines.dsh`）。插件跟随 DSH 自带的 Node 运行；本地开发和测试要 Node 22.13+，理由写在[开发](#开发)一节。
+运行要求 DSH `>=0.2.2-rc.1 <0.2.3-0`（见[兼容性](#兼容性)）。插件跟随 DSH 自带的 Node 运行；本地开发和测试要 Node 22.13+，理由写在[开发](#开发)一节。
+
+## 兼容性
+
+| | |
+|---|---|
+| 支持范围 | `>=0.2.2-rc.1 <0.2.3-0`：`0.2.2` 这一代，从 `rc.1` 到 `rc.5` 的全部预发布版，加上 `0.2.2` 正式版 |
+| 声明位置 | `package.json` 的 `engines.dsh`。DSH 在安装和启用插件时用 semver 校验它，且把预发布版算进范围（`includePrerelease`）；不满足就直接拒绝安装或启用，而不是装上去再运行时报错 |
+| 为什么上限是 `<0.2.3-0` | DSH 的校验含预发布版，写成 `<0.2.3` 会把 0.2.3 的预发布版一起放进来；`<0.2.3-0` 才是「到 0.2.2 这一代为止」 |
+| 已回归 | `0.2.2-rc.1`、`0.2.2-rc.3`（桌面版自带）、`0.2.2-rc.5`（npm 上的 `latest`）：真实宿主 e2e 14 项 + 浏览器 e2e 9 项全部通过 |
+| 不在范围内 | `0.2.3` 及其预发布版。0.2.3-alpha.2 把 Connection 的凭据校验拆到 `connection.authentication`，插件调用 `ctx.connection.admit` 时会被要求先注入该服务，端点一律 403；要支持得另出一版 |
+| 依赖的 DSH 内部约定 | slot `conversation.input.dock` / `settings.general.item`，slot 给的 `inputActions`、`useInput`、`useSessionStatus`、`configForms`，以及 `[data-composer-card]` 这个 DOM 约定 |
+
+DSH 升级到 0.3 之前按上表最后一行复查一次：slot 或 props 变了改 `client.js`，`connection.admit` 的凭据模型变了改 `lib/http.js`。
 
 ## 用法
 
@@ -146,7 +159,7 @@ dsh plugin --profile <name> add @wangxiaocuo/dsh-composer-prefill
 - 建议显示在输入框上方，光标处不做内联幽灵文本。那要测量并克隆 Lexical 编辑器的 DOM，主题和缩放一变就容易坏。
 - `Tab` 依赖 `[data-composer-card]` 这个内部 DOM 约定。
 - 一次真实模型调用，从请求到显示大约 1–3 秒。
-- 只针对 `0.2.2-rc.1` 这一代 API。DSH 升级后需要回归，包括 `[data-composer-card]` 和插件用的英文 aria-label。
+- 只针对 `0.2.2` 这一代 API（范围见[兼容性](#兼容性)）。0.2.3 起 Connection 的凭据模型变了，需要另做一版适配。其余 DSH 升级后也需要回归，包括 `[data-composer-card]` 和插件用的英文 aria-label。
 - `client.js` 由宿主 loader 直接加载，不在 `tsc --checkJs` 范围内；类型检查只覆盖宿主半（`index.js` 和 `lib/**`）。
 - 浏览器 e2e 用路由拦截桩掉预测返回，验的是客户端状态机和真实外壳，不覆盖模型输出质量。
 
@@ -159,6 +172,7 @@ dsh plugin --profile <name> add @wangxiaocuo/dsh-composer-prefill
 - 0.4.0：切回会话时的补预测（`view` 模式）
 - 0.4.1：提示词与载荷 v2（过滤注入上下文、头尾裁剪、任务锚点、工具动作、语言、换一条防重复）
 - 0.4.2：新插件图标
+- 0.4.4：把支持的 DSH 范围收成 `>=0.2.2-rc.1 <0.2.3-0`，并在 `0.2.2-rc.1` / `rc.3` / `rc.5` 上跑通全部 e2e
 - 0.5.0（可选）：内联幽灵文本、建议条上的候选切换
 
 ## 开发
@@ -211,7 +225,7 @@ CI 在 GitHub Actions 上跑（[ci.yml](.github/workflows/ci.yml)），发版由
 | 单元测试和宿主 smoke test | Ubuntu Node 22 / 24，Windows Node 22 |
 | 覆盖率门槛（`lib/**`） | Ubuntu Node 22 |
 | 打包内容（`npm pack` 文件清单） | Ubuntu Node 22 |
-| 真实 Host 和浏览器 e2e（临时 `DSH_HOME` + pinned `dsh` runtime） | Ubuntu Node 24 |
+| 真实 Host 和浏览器 e2e（临时 `DSH_HOME` + pinned `dsh` runtime） | Ubuntu Node 24，DSH `0.2.2-rc.5` |
 
 覆盖率门槛是 `lib/**` 行 95% / 分支 90% / 函数 95%。`test/run-unit.mjs` 自己枚举 `*.test.mjs`，不靠 shell 展开 glob，所以 Windows 上跑的是同一批用例。
 

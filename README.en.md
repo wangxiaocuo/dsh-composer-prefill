@@ -7,7 +7,7 @@
 [![npm](https://img.shields.io/npm/v/@wangxiaocuo/dsh-composer-prefill?label=npm)](https://www.npmjs.com/package/@wangxiaocuo/dsh-composer-prefill)
 [![CI](https://github.com/wangxiaocuo/dsh-composer-prefill/actions/workflows/ci.yml/badge.svg)](https://github.com/wangxiaocuo/dsh-composer-prefill/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/@wangxiaocuo/dsh-composer-prefill)](LICENSE)
-[![dsh](https://img.shields.io/badge/dsh-0.2.2--rc.1-5b5bd6)](package.json)
+[![dsh](https://img.shields.io/badge/dsh-%3E%3D0.2.2--rc.1%20%3C0.2.3--0-5b5bd6)](package.json)
 
 When an assistant turn ends, a suggestion appears above the composer with the next message you would probably type. Press `Tab` or click it to fill the draft. It never sends anything for you.
 
@@ -45,7 +45,20 @@ After installing there are two entry points:
 - **Settings → General**: a "Composer predictions" switch. It applies immediately and stores the choice in the profile.
 - **Settings → Plugins → Composer predictions → Configuration**: the other nine fields.
 
-Runtime: DeepSeek Harness `0.2.2-rc.1` (see `engines.dsh`). The plugin runs on the Node that DSH itself ships; local development and tests need Node 22.13+ (why, in [Development](#development)).
+Runtime: DeepSeek Harness `>=0.2.2-rc.1 <0.2.3-0` (see [Compatibility](#compatibility)). The plugin runs on the Node that DSH itself ships; local development and tests need Node 22.13+ (why, in [Development](#development)).
+
+## Compatibility
+
+| | |
+|---|---|
+| Supported range | `>=0.2.2-rc.1 <0.2.3-0`: the `0.2.2` generation, every pre-release from `rc.1` through `rc.5`, plus `0.2.2` final |
+| Where it is declared | `engines.dsh` in `package.json`. DSH checks it with semver when installing and when activating a plugin, pre-releases included (`includePrerelease`); an unmet range is refused up front instead of failing at run time |
+| Why the ceiling is `<0.2.3-0` | DSH's check includes pre-releases, so `<0.2.3` would also admit 0.2.3 pre-releases; `<0.2.3-0` is the one that means "up to the 0.2.2 generation" |
+| Regression-tested | `0.2.2-rc.1`, `0.2.2-rc.3` (bundled with the desktop app), `0.2.2-rc.5` (npm `latest`): 14 real-Host e2e checks and 9 browser e2e checks pass on each |
+| Not supported | `0.2.3` and its pre-releases. 0.2.3-alpha.2 splits Connection credential verification into `connection.authentication`, so `ctx.connection.admit` refuses to run unless that service is injected and every endpoint answers 403; supporting it needs a separate release |
+| DSH internals relied on | the `conversation.input.dock` / `settings.general.item` slots, the `inputActions`, `useInput`, `useSessionStatus` and `configForms` values those slots hand over, and the `[data-composer-card]` DOM contract |
+
+Before moving to DSH 0.3, re-check the last row: slot or prop changes go into `client.js`, a changed `connection.admit` credential model goes into `lib/http.js`.
 
 ## Usage
 
@@ -148,7 +161,7 @@ The prompt turns those fields into a decision procedure. Classify the assistant'
 - The suggestion sits above the composer; there is no inline ghost text at the caret. That would mean measuring and cloning the Lexical editor DOM, which breaks under a theme or zoom change.
 - `Tab` relies on the internal `[data-composer-card]` DOM contract.
 - Latency is one real model call, about 1-3 seconds from request to row.
-- Only the `0.2.2-rc.1` API generation is targeted. A DSH upgrade needs a regression pass, including `[data-composer-card]` and the English aria-labels the plugin uses.
+- Only the `0.2.2` API generation is targeted (range in [Compatibility](#compatibility)); the `0.2.3` Connection credential rework needs its own adaptation. Any other DSH upgrade needs a regression pass, including `[data-composer-card]` and the English aria-labels the plugin uses.
 - `client.js` is loaded by the Host loader and is outside `tsc --checkJs`; only the Host half (`index.js` and `lib/**`) is typechecked.
 - The browser e2e stubs the prediction response through route interception, so it proves the client state machine inside the real shell and does not cover model output quality.
 
@@ -161,6 +174,7 @@ The prompt turns those fields into a decision procedure. Classify the assistant'
 - 0.4.0: catch-up predictions on switching back to a session (`view` mode)
 - 0.4.1: prompt and payload v2 (injected-context filtering, head and tail clipping, task anchor, tool actions, language, reroll de-duplication)
 - 0.4.2: new plugin icon
+- 0.4.4: pin the supported DSH range to `>=0.2.2-rc.1 <0.2.3-0` and pass every e2e suite on `0.2.2-rc.1`, `rc.3` and `rc.5`
 - 0.5.0 (optional): inline ghost text, candidate cycling on the row
 
 ## Development
@@ -213,7 +227,7 @@ CI runs on GitHub Actions ([ci.yml](.github/workflows/ci.yml)); releases are tag
 | Unit tests and the Host smoke test | Ubuntu Node 22 / 24, Windows Node 22 |
 | Coverage floor (`lib/**`) | Ubuntu Node 22 |
 | Package contents (`npm pack` file list) | Ubuntu Node 22 |
-| Real Host and browser e2e (throwaway `DSH_HOME`, pinned `dsh` runtime) | Ubuntu Node 24 |
+| Real Host and browser e2e (throwaway `DSH_HOME`, pinned `dsh` runtime) | Ubuntu Node 24, DSH `0.2.2-rc.5` |
 
 The floor on `lib/**` is 95% lines, 90% branches and 95% functions. `test/run-unit.mjs` enumerates `*.test.mjs` itself instead of relying on shell glob expansion, so Windows runs the same cases.
 
